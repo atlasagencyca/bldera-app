@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "BLDERA",
+    "slug": "BLDERA",
+    "version": "1.0.1",
+    "entryPoint": "src/App.js",
+    "scheme": "bldera",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "bundleIdentifier": "com.bldera",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationAlwaysUsageDescription": "This app needs access to your location in the background to track your position during work hours (for older iOS versions).",
+        "NSCameraUsageDescription": "This app uses the camera to take photos.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BLDERA app requires location in the background",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to determine your timezone for accurate pay period calculations.",
+        "NSMotionUsageDescription": "BLDERA app uses motion-detection to save battery by determining the motion-activity of the device (walking, vehicle, bicycle, etc)",
+        "NSPhotoLibraryUsageDescription": "BLDERA app requires access to your photos to upload bills.",
+        "NSPhotoLibraryAddUsageDescription": "BLDERA app needs permission to save photos to your library.",
+        "UIBackgroundModes": ["location", "fetch", "processing"],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.transistorsoft.fetch",
+          "com.transistorsoft.customtask"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.bldera.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow this app to access your camera."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      ["react-native-background-geolocation"],
+      "react-native-background-fetch",
+      "expo-secure-store",
+      "expo-localization"
+    ]
+  }
+}
