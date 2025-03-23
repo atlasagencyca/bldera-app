@@ -74,6 +74,24 @@ export default function MaterialOrderScreen() {
     fetchProjects();
   }, []);
 
+  const getAvailabilityColor = (required, ordered, pending) => {
+    const total = required || 0;
+    const used = (ordered || 0) + (pending || 0);
+    const percentage = total > 0 ? (used / total) * 100 : 0;
+
+    if (percentage >= 100) {
+      return { color: "bg-red-500", textColor: "text-red-600", percentage };
+    } else if (percentage >= 75) {
+      return {
+        color: "bg-yellow-500",
+        textColor: "text-yellow-600",
+        percentage,
+      };
+    } else {
+      return { color: "bg-green-500", textColor: "text-green-600", percentage };
+    }
+  };
+
   useEffect(() => {
     if (!selectedProject) return;
 
@@ -117,6 +135,8 @@ export default function MaterialOrderScreen() {
           quantityPending: projectItem ? projectItem.quantityPending : 0,
           vendor: lineItem.vendor.companyName,
           vendorId: lineItem.vendor,
+          container: lineItem.container,
+          size: lineItem.size,
         };
       })
       .filter((item) => {
@@ -443,6 +463,12 @@ export default function MaterialOrderScreen() {
                       item.quantityRequired -
                       item.quantityOrdered -
                       item.quantityPending;
+                    const { color, textColor, percentage } =
+                      getAvailabilityColor(
+                        item.quantityRequired,
+                        item.quantityOrdered,
+                        item.quantityPending
+                      );
                     return (
                       <View
                         key={item._id}
@@ -453,29 +479,53 @@ export default function MaterialOrderScreen() {
                         >
                           {item.title}
                         </Text>
-                        <Text style={tw`text-[14px] text-gray-600 mb-1`}>
-                          Vendor: {item.vendor || "N/A"}
+                        <View style={tw`flex-row justify-between mb-1`}>
+                          <Text style={tw`text-[14px] text-gray-600`}>
+                            Req: {item.quantityRequired.toLocaleString()}
+                          </Text>
+                          <Text style={tw`text-[14px] text-gray-600`}>
+                            Ord: {item.quantityOrdered.toLocaleString()}
+                          </Text>
+                        </View>
+                        <View style={tw`flex-row justify-between mb-1`}>
+                          <Text style={tw`text-[14px] text-gray-600`}>
+                            Pend: {item.quantityPending.toLocaleString()}
+                          </Text>
+                          <Text style={tw`${textColor} text-[14px]`}>
+                            Avail: {remainingQty.toLocaleString()} (
+                            {percentage.toFixed(1)}%)
+                          </Text>
+                        </View>
+                        <View
+                          style={tw`w-full bg-gray-200 rounded-full h-2 mb-3`}
+                        >
+                          <View
+                            style={tw`w-[${percentage}%] ${color} h-2 rounded-full`}
+                          />
+                        </View>
+                        <View style={tw`flex-row items-center mb-3`}>
+                          <TextInput
+                            style={tw`bg-gray-100 text-gray-900 p-3 rounded-lg w-24 text-[16px] border border-gray-300`}
+                            keyboardType="numeric"
+                            value={selectedItems[item._id] || ""}
+                            onChangeText={(value) =>
+                              handleItemQuantityChange(item._id, value)
+                            }
+                            placeholder="Qty"
+                            placeholderTextColor="#999"
+                          />
+                          <Text style={tw`text-[14px] text-gray-600 ml-3`}>
+                            {item.size} {item.container}
+                          </Text>
+                        </View>
+                        <Text style={tw`text-[14px] text-gray-600`}>
+                          Vendor: {item.vendor}
                         </Text>
-                        <Text style={tw`text-[14px] text-gray-600 mb-1`}>
-                          Description: {item.description || "N/A"}
-                        </Text>
-                        <Text style={tw`text-[14px] text-gray-600 mb-1`}>
-                          Req: {item.quantityRequired} | Ord:{" "}
-                          {item.quantityOrdered} | Pend: {item.quantityPending}
-                        </Text>
-                        <Text style={tw`text-[14px] text-gray-600 mb-3`}>
-                          Available: {remainingQty}
-                        </Text>
-                        <TextInput
-                          style={tw`bg-gray-100 text-gray-900 p-3 rounded-lg w-24 text-[16px] border border-gray-300`}
-                          keyboardType="numeric"
-                          value={selectedItems[item._id] || ""}
-                          onChangeText={(value) =>
-                            handleItemQuantityChange(item._id, value)
-                          }
-                          placeholder="Qty"
-                          placeholderTextColor="#999"
-                        />
+                        {item.description && (
+                          <Text style={tw`text-[14px] text-gray-600 mt-1`}>
+                            Desc: {item.description}
+                          </Text>
+                        )}
                       </View>
                     );
                   })}

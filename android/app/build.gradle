@@ -93,13 +93,13 @@ Project background_fetch = project(':react-native-background-fetch')
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.bldera.app'
+    namespace 'com.bldera'
     defaultConfig {
-        applicationId 'com.bldera.app'
+        applicationId 'com.bldera'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.0"
+        versionName "1.0.2"
     }
     signingConfigs {
         debug {

@@ -2,6 +2,10 @@
 
 buildscript {
     ext {
+// @generated begin expo-gradle-ext-vars - expo prebuild (DO NOT MODIFY) sync-a14167d3df9d6380c3d77a8f8070215ea8a94013
+	googlePlayServicesLocationVersion = "21.1.0"
+	appCompatVersion = "1.4.2"
+// @generated end expo-gradle-ext-vars
         buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
         minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
         compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')

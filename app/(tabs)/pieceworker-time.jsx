@@ -156,6 +156,7 @@ export default function PieceworkScreen() {
       );
       if (!response.ok) throw new Error("Failed to fetch projects");
       const data = await response.json();
+
       setProjects(data);
       await AsyncStorage.setItem("projects", JSON.stringify(data));
     } catch (error) {
@@ -217,6 +218,7 @@ export default function PieceworkScreen() {
 
   const handleSelectWorkOrder = async (workOrder) => {
     setSelectedWorkOrder(workOrder);
+
     setLineItems(workOrder.lineItems || []);
     try {
       const token = await SecureStore.getItemAsync("authToken");
@@ -224,8 +226,12 @@ export default function PieceworkScreen() {
         "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/pieceworkers",
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      console.log(response);
+
       if (response.ok) {
         const data = await response.json();
+
         setEmployees(data);
       }
     } catch (error) {
@@ -923,19 +929,20 @@ export default function PieceworkScreen() {
 
             {historyTab === "pending" && (
               <>
-                {userRole === "admin" && (
-                  <TouchableOpacity
-                    style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-green-500 shadow-md`}
-                    onPress={() => handleApproveLog(selectedLog._id)}
-                  >
-                    <FontAwesome name="check" size={20} color="#10b981" />
-                    <Text
-                      style={tw`text-[18px] text-green-600 ml-3 font-semibold flex-1`}
+                {userRole === "admin" ||
+                  (userRole === "foreman" && (
+                    <TouchableOpacity
+                      style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-green-500 shadow-md`}
+                      onPress={() => handleApproveLog(selectedLog._id)}
                     >
-                      Approve Worksheet
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                      <FontAwesome name="check" size={20} color="#10b981" />
+                      <Text
+                        style={tw`text-[18px] text-green-600 ml-3 font-semibold flex-1`}
+                      >
+                        Approve Worksheet
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 <TouchableOpacity
                   style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-red-500 shadow-md`}
                   onPress={() => handleRejectLog(selectedLog._id)}

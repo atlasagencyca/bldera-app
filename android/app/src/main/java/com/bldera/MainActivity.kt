@@ -1,4 +1,4 @@
-package com.bldera.app
+package com.bldera
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

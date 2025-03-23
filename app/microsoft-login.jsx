@@ -12,14 +12,13 @@ import {
 import * as AuthSession from "expo-auth-session";
 import * as SecureStore from "expo-secure-store";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 import tw from "twrnc";
 
-const tenantID = "9d6df540-19fa-4585-8615-37183a530b0f";
-const clientID = "a6dd00fe-d3e8-4540-927a-e42f5046e5cb";
+const tenantID = "9d6df540-19fa-4585-8615-37183a530b0f8";
+const clientID = "a6dd00fe-d3e8-4540-927a-e U42f5046e5cb";
 const redirectUrl = "bldera://redirect";
 
-export default function LoginScreen() {
+export default function MicrosoftLoginScreen() {
   const [loading, setLoading] = useState(true);
   const [discovery, setDiscovery] = useState(null);
   const [authRequest, setAuthRequest] = useState(null);
@@ -50,11 +49,6 @@ export default function LoginScreen() {
       setAuthRequest(authRequest);
     } catch (error) {
       console.error("Error during session setup:", error);
-      await SecureStore.deleteItemAsync("authToken");
-      await SecureStore.deleteItemAsync("userName");
-      await SecureStore.deleteItemAsync("userEmail");
-      await SecureStore.deleteItemAsync("userId");
-      Alert.alert("Setup Error", "Failed to initialize authentication.");
     } finally {
       setLoading(false);
     }
@@ -68,11 +62,20 @@ export default function LoginScreen() {
           "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/current",
           { headers: { Authorization: `Bearer ${token}` } }
         );
+
         const data = await response.json();
-        router.replace("/(tabs)/clock-in-out");
+        const isClockedIn = !!data.isClockedIn;
+
+        router.replace({
+          pathname: "/(tabs)/clock-in-out",
+          params: {
+            clockedIn: isClockedIn.toString(),
+            clockData: JSON.stringify(data),
+          },
+        });
       }
     } catch (error) {
-      console.error("Error checking auth:", error);
+      console.error("Error checking auth token or clock status:", error);
     } finally {
       setLoading(false);
     }
@@ -80,12 +83,14 @@ export default function LoginScreen() {
 
   const handleMicrosoftLogin = async () => {
     if (!authRequest || !discovery) {
-      Alert.alert("Error", "Authentication not ready.");
+      Alert.alert("Error", "Authentication not ready. Please try again.");
       return;
     }
+
     try {
       setLoading(true);
       const authorizeResult = await authRequest.promptAsync(discovery);
+
       if (authorizeResult.type === "success") {
         const tokenResult = await AuthSession.exchangeCodeAsync(
           {
@@ -96,14 +101,14 @@ export default function LoginScreen() {
           },
           discovery
         );
+
         const { accessToken } = tokenResult;
-        if (!accessToken) throw new Error("Missing access token");
+        if (!accessToken)
+          throw new Error("Missing access token from Microsoft");
 
         const userInfoResponse = await fetch(
           "https://graph.microsoft.com/v1.0/me",
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
+          { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         const userData = await userInfoResponse.json();
         const email = userData.mail || userData.userPrincipalName;
@@ -121,8 +126,10 @@ export default function LoginScreen() {
         );
         const backendData = await backendResponse.json();
 
-        if (!backendData.success)
-          throw new Error(backendData.message || "Login failed");
+        if (!backendData.success) {
+          throw new Error(backendData.message || "Backend login failed");
+        }
+
         await handleLoginSuccess(backendData);
       }
     } catch (error) {
@@ -138,9 +145,13 @@ export default function LoginScreen() {
 
   const handleLoginSuccess = async (data) => {
     if (data.user.role !== "foreman" && data.user.role !== "admin") {
-      Alert.alert("Access Denied", "You must be an admin or foreman.");
+      Alert.alert(
+        "Access Denied",
+        "You must be an admin or foreman to use this app."
+      );
       return;
     }
+
     await SecureStore.setItemAsync("authToken", data.token);
     await SecureStore.setItemAsync("userName", data.user.displayName);
     await SecureStore.setItemAsync("userEmail", data.user.email);
@@ -151,20 +162,27 @@ export default function LoginScreen() {
       { headers: { Authorization: `Bearer ${data.token}` } }
     );
     const clockData = await clockResponse.json();
-    router.replace("/(tabs)/clock-in-out");
+
+    router.replace({
+      pathname: "/(tabs)/clock-in-out",
+      params: {
+        clockedIn: (!!clockData.isClockedIn).toString(),
+        clockData: JSON.stringify(clockData),
+      },
+    });
   };
 
   if (loading) {
     return (
       <SafeAreaView style={tw`flex-1 justify-center items-center bg-gray-900`}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color="#1e3a8a" />
       </SafeAreaView>
     );
   }
 
   return (
     <LinearGradient
-      colors={["#1e3a8a", "#3b82f6"]}
+      colors={["#182e6e", "#344d95"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={tw`flex-1`}
@@ -172,20 +190,14 @@ export default function LoginScreen() {
       <SafeAreaView style={tw`flex-1 justify-center items-center px-6`}>
         <Image
           source={require("../assets/images/bldera.png")}
-          style={tw`w-40 h-40 mb-10`}
+          style={tw`w-48 h-48 mb-8`}
           resizeMode="contain"
         />
-        <Text style={tw`text-4xl font-bold text-white mb-3 text-center`}>
-          Welcome Back
+        <Text style={tw`text-3xl font-extrabold text-white mb-4 text-center`}>
+          Microsoft Login
         </Text>
-        <Text
-          style={tw`text-base text-gray-200 mb-12 text-center max-w-xs leading-6`}
-        >
-          Sign in to manage your time cards and projects
-        </Text>
-
         <TouchableOpacity
-          style={tw`bg-white rounded-xl py-4 px-6 flex-row items-center justify-center shadow-lg mb-4 w-full max-w-sm`}
+          style={tw`bg-white rounded-full py-4 px-8 flex-row items-center shadow-lg`}
           onPress={handleMicrosoftLogin}
         >
           <Image
@@ -193,17 +205,17 @@ export default function LoginScreen() {
             style={tw`w-6 h-6 mr-3`}
             resizeMode="contain"
           />
-          <Text style={tw`text-blue-900 text-lg font-medium`}>
-            Microsoft Login
+          <Text style={tw`text-blue-900 text-lg font-semibold`}>
+            Sign in with Microsoft
           </Text>
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={tw`bg-blue-500 rounded-xl py-4 px-6 flex-row items-center justify-center w-full max-w-sm shadow-lg`}
-          onPress={() => router.push("/email-login")}
+          style={tw`mt-4`}
+          onPress={() => router.push("/login")}
         >
-          <Feather name="mail" size={24} color="white" style={tw`mr-3`} />
-          <Text style={tw`text-white text-lg font-medium`}>Email Login</Text>
+          <Text style={tw`text-white text-lg underline`}>
+            Back to Login Options
+          </Text>
         </TouchableOpacity>
       </SafeAreaView>
     </LinearGradient>
