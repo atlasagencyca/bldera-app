@@ -54,17 +54,14 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 export default function ClockScreen({ navigation }) {
   const { clockedIn: initialClockedIn, clockData } = useLocalSearchParams();
   const parsedClockData = clockData ? JSON.parse(clockData) : null;
-  const [ClockedIn, setClockedIn] = useState(initialClockedIn === "true");
-  const [ClockInTime, setClockInTime] = useState(null);
-
+  const [clockInStatus, setClockInStatus] = useState(false);
+  const [clockInTime, setClockInTime] = useState(null);
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
   const [timesheetId, setTimesheetId] = useState(
-    parsedClockData?.isClockedIn && parsedClockData?.timesheet?._id
+    parsedClockData?.clockInStatus && parsedClockData?.timesheet?._id
       ? parsedClockData.timesheet._id
       : null
   );
-
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
@@ -76,7 +73,6 @@ export default function ClockScreen({ navigation }) {
   const [isTaskCompleted, setIsTaskCompleted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [buttonDisabled, setButtonDisabled] = useState(false);
-
   const [projects, setProjects] = useState([]);
   const [isSelectionLocked, setIsSelectionLocked] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -84,7 +80,6 @@ export default function ClockScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [selectedType, setSelectedType] = useState(null);
   const [locations, setLocations] = useState([]);
-
   const [inputText, setInputText] = useState("");
   const [vehiclePermission, setVehiclePermission] = useState(false);
   const [usePersonalVehicle, setUsePersonalVehicle] = useState(false);
@@ -99,6 +94,7 @@ export default function ClockScreen({ navigation }) {
     useState(false);
   const [userId, setUserId] = useState(null);
   const [userGeoFence, setUserGeoFence] = useState(false);
+  const [isPaid, setIsPaid] = useState(false); // New state for paid status
   const cameraRef = useRef(null);
   const [facing, setFacing] = useState("back");
 
@@ -119,9 +115,7 @@ export default function ClockScreen({ navigation }) {
     const loadNotes = async () => {
       try {
         const savedNotes = await AsyncStorage.getItem("savedNotes");
-        if (savedNotes) {
-          setInputText(savedNotes);
-        }
+        if (savedNotes) setInputText(savedNotes);
       } catch (error) {
         console.error("Failed to load notes:", error);
       }
@@ -130,70 +124,17 @@ export default function ClockScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    const initializeClockData = async () => {
-      try {
-        const storedClockedIn = await AsyncStorage.getItem("ClockedIn");
-        const storedClockInTime = await AsyncStorage.getItem("ClockInTime");
-        const storedClockInData = await AsyncStorage.getItem("ClockInData");
-
-        if (storedClockedIn === "true") {
-          if (storedClockInTime) {
-            console.log(
-              "Loaded ClockInTime from AsyncStorage:",
-              storedClockInTime
-            );
-            setClockedIn(true);
-            setClockInTime(storedClockInTime);
-          } else if (storedClockInData) {
-            const clockInData = JSON.parse(storedClockInData);
-            console.log(
-              "Loaded ClockInTime from ClockInData:",
-              clockInData.start
-            );
-            setClockedIn(true);
-            setClockInTime(clockInData.start);
-            setTimesheetId(clockInData.timesheetId);
-            setUsePersonalVehicle(clockInData.usePersonalVehicle);
-          }
-        } else if (
-          parsedClockData?.isClockedIn &&
-          parsedClockData?.timesheet?.start
-        ) {
-          console.log(
-            "Loaded ClockInTime from parsedClockData:",
-            parsedClockData.timesheet.start
-          );
-          setClockedIn(true);
-          setClockInTime(parsedClockData.timesheet.start);
-          setTimesheetId(parsedClockData.timesheet._id);
-        } else {
-          console.log("No local clock data found, checking server...");
-          await checkClockInStatus();
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error("Error initializing clock data:", error);
-        setLoading(false);
-      }
-    };
-
-    initializeClockData();
-  }, [parsedClockData]);
-
-  useEffect(() => {
     const checkPermissions = async () => {
       const { status } = await ImagePicker.getCameraPermissionsAsync();
-      if (status !== "granted") {
+      if (status !== "granted" && isPaid) {
+        // Only request if paid
         const { status: newStatus } =
           await ImagePicker.requestCameraPermissionsAsync();
-        if (newStatus === "granted") {
-          requestPermission();
-        }
+        if (newStatus === "granted") requestPermission();
       }
     };
     checkPermissions();
-  }, []);
+  }, [isPaid]);
 
   const loadSelections = useCallback(async () => {
     try {
@@ -222,74 +163,67 @@ export default function ClockScreen({ navigation }) {
     }, [])
   );
 
-  const navigateToWorkOrderSelection = () => {
-    if (!selectedProject) {
-      alert("Please select a project first.");
-      router.push("/select-project");
-      return;
+  const syncTimesheetUpdates = async () => {
+    try {
+      const storedClockInStatus = await AsyncStorage.getItem("clockInStatus");
+      const isClockedIn = storedClockInStatus === "true";
+      if (!isClockedIn) {
+        console.log("Not clocked in, skipping sync");
+        return;
+      }
+
+      const storedLocations = await AsyncStorage.getItem("locations");
+      const locationsArray = storedLocations ? JSON.parse(storedLocations) : [];
+      if (locationsArray.length === 0) {
+        console.log("No new locations to sync");
+        return;
+      }
+
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        console.log("Offline: Locations stored locally, will sync later");
+        return;
+      }
+
+      console.log("Syncing locations to server:", locationsArray.length);
+      await postLocationsToServer(locationsArray);
+    } catch (error) {
+      console.error("Error in syncTimesheetUpdates:", error.message);
     }
-    router.push("/select-work-order");
   };
 
   useEffect(() => {
-    const initializeData = async () => {
+    let syncInterval;
+    if (clockInStatus && isPaid) {
+      syncInterval = setInterval(syncTimesheetUpdates, 30000);
+    }
+    return () => syncInterval && clearInterval(syncInterval);
+  }, [clockInStatus, isPaid]);
+
+  useEffect(() => {
+    const initializeClockScreen = async () => {
       try {
+        setLoading(true);
+
         const storedUserId = await SecureStore.getItemAsync("userId");
-        if (storedUserId) {
-          setUserId(storedUserId);
-        } else {
-          console.error("User ID not found in SecureStore.");
-          Alert.alert("Error", "User ID not found. Please log in again.");
-          return;
-        }
+        if (!storedUserId) throw new Error("User ID not found");
+        setUserId(storedUserId);
 
         const token = await SecureStore.getItemAsync("authToken");
-        if (!token) {
-          console.error("Auth token not found in SecureStore.");
-          Alert.alert(
-            "Error",
-            "Authentication token missing. Please log in again."
-          );
-          return;
-        }
+        if (!token) throw new Error("Auth token not found");
 
-        const userResponse = await fetch(
-          "https://erp-production-72da01c8e651.herokuapp.com/api/users/email",
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!userResponse.ok) {
-          throw new Error("Failed to fetch user data");
-        }
-
-        const userData = await userResponse.json();
-        if (userData.success) {
-          setUserGeoFence(userData.user.geoFence || false);
-        } else {
-          console.error("User data fetch failed:", userData.message);
-          setUserGeoFence(false);
-        }
+        const userEmail = await SecureStore.getItemAsync("userEmail");
+        if (!userEmail) throw new Error("User email not found");
 
         const netInfo = await NetInfo.fetch();
         if (netInfo.isConnected) {
+          // Fetch projects
           const projectsResponse = await fetch(
             "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/projects/hourly",
             { headers: { Authorization: `Bearer ${token}` } }
           );
-
-          if (!projectsResponse.ok) {
-            throw new Error("Failed to fetch hourly projects");
-          }
+          if (!projectsResponse.ok) throw new Error("Failed to fetch projects");
           const data = await projectsResponse.json();
-
-          console.log(data[0].workOrders);
-
           const projectsWithRequiredFields = data.map((project) => ({
             _id: project._id,
             projectName: project.projectName,
@@ -297,87 +231,88 @@ export default function ClockScreen({ navigation }) {
             address: project.address,
           }));
           setProjects(projectsWithRequiredFields);
-
           await SecureStore.setItemAsync(
             "projects",
             JSON.stringify(projectsWithRequiredFields)
           );
-        } else {
-          const storedProjects = await SecureStore.getItemAsync("projects");
-          if (storedProjects) {
-            setProjects(JSON.parse(storedProjects));
-          } else {
-            Alert.alert(
-              "No Projects Found",
-              "Please connect to the internet to fetch projects."
+
+          // Fetch user data by email
+          const userResponse = await fetch(
+            "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/email",
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          if (!userResponse.ok) {
+            const errorData = await userResponse.json();
+            throw new Error(
+              `Failed to fetch user data: ${
+                errorData.message || userResponse.statusText
+              }`
             );
           }
-        }
-
-        await loadDetails();
-        await checkClockInStatus();
-
-        const storedValue = await SecureStore.getItemAsync("vehiclePermission");
-        if (storedValue) {
-          setVehiclePermission(JSON.parse(storedValue));
-        }
-
-        const { status: mediaLibraryStatus } =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (mediaLibraryStatus !== "granted") {
-          Alert.alert(
-            "Media Library Permission",
-            "Permission to access the media library was denied."
-          );
-          setErrorMsg("Permission to access the media library was denied");
-          return;
-        }
-
-        const { status: notificationStatus } =
-          await Notifications.requestPermissionsAsync();
-        if (notificationStatus !== "granted") {
-          alert("Permission to access notifications was denied");
-          setErrorMsg("Permission to access notifications was denied");
-          return;
-        }
-
-        const requestLocationPermissions = async () => {
-          if (Platform.OS === "ios") {
-            const { status: foregroundStatus } =
-              await Location.requestForegroundPermissionsAsync();
-            if (foregroundStatus !== "granted") {
-              alert("Foreground location permission denied");
-              setErrorMsg("Foreground location permission was denied");
-              return;
-            }
-            await Location.requestBackgroundPermissionsAsync();
-          } else if (Platform.OS === "android") {
-            const { status: foregroundStatus } =
-              await Location.requestForegroundPermissionsAsync();
-            if (foregroundStatus !== "granted") {
-              alert("Foreground location permission denied");
-              setErrorMsg("Foreground location permission was denied");
-              return;
-            }
-            await Location.requestBackgroundPermissionsAsync();
+          const userData = await userResponse.json();
+          console.log(userData);
+          if (!userData.success || !userData.user) {
+            throw new Error("User not found or invalid response");
           }
-        };
 
-        await requestLocationPermissions();
-
-        await configureBackgroundGeolocation();
+          const { isPaid, geoFence } = userData.user;
+          setIsPaid(isPaid || false);
+          setUserGeoFence(geoFence || false);
+          await SecureStore.setItemAsync(
+            "isPaid",
+            JSON.stringify(isPaid || false)
+          );
+          await SecureStore.setItemAsync(
+            "geoFence",
+            JSON.stringify(geoFence || false)
+          );
+        } else {
+          // Offline mode: Use stored values
+          const storedProjects = await SecureStore.getItemAsync("projects");
+          if (storedProjects) setProjects(JSON.parse(storedProjects));
+          const storedIsPaid = await SecureStore.getItemAsync("isPaid");
+          if (storedIsPaid) setIsPaid(JSON.parse(storedIsPaid));
+          const storedGeoFence = await SecureStore.getItemAsync("geoFence");
+          if (storedGeoFence) setUserGeoFence(JSON.parse(storedGeoFence));
+        }
 
         await checkClockInStatus();
+        if (isPaid) await configureBackgroundGeolocation();
+
+        if (
+          parsedClockData?.clockInStatus &&
+          parsedClockData?.timesheet?.start
+        ) {
+          const storedClockInStatus = await AsyncStorage.getItem(
+            "clockInStatus"
+          );
+          if (
+            storedClockInStatus === "true" &&
+            parsedClockData.timesheet._id === timesheetId
+          ) {
+            setClockInStatus(true);
+            setClockInTime(parsedClockData.timesheet.start);
+            setTimesheetId(parsedClockData.timesheet._id);
+          }
+        }
 
         setLoading(false);
-        setButtonDisabled(false);
       } catch (error) {
-        console.error("Error during initialization:", error);
+        console.error("Initialization error:", error.message);
+        setClockInStatus(false);
+        setIsPaid(false); // Default to false on error
+        setUserGeoFence(false); // Default to false on error
         setLoading(false);
       }
     };
 
-    initializeData();
+    initializeClockScreen();
   }, []);
 
   const addNote = () => {
@@ -393,6 +328,8 @@ export default function ClockScreen({ navigation }) {
   };
 
   const configureBackgroundGeolocation = async () => {
+    if (!isPaid) return;
+
     try {
       const { status: foregroundStatus } =
         await Location.requestForegroundPermissionsAsync();
@@ -431,17 +368,21 @@ export default function ClockScreen({ navigation }) {
 
       BackgroundGeolocation.onLocation(
         async (location) => {
+          const storedClockInStatus = await AsyncStorage.getItem(
+            "clockInStatus"
+          );
           const storedLocations = await AsyncStorage.getItem("locations");
           const locationsArray = storedLocations
             ? JSON.parse(storedLocations)
             : [];
+
           locationsArray.push(location);
           setLocations(locationsArray);
           await AsyncStorage.setItem(
             "locations",
             JSON.stringify(locationsArray)
           );
-          if (ClockedIn) {
+          if (storedClockInStatus) {
             await postLocationsToServer(locationsArray);
           }
         },
@@ -449,6 +390,14 @@ export default function ClockScreen({ navigation }) {
           console.error("Location error:", error.message);
         }
       );
+
+      const storedClockInStatus = await AsyncStorage.getItem("clockInStatus");
+      if (storedClockInStatus === "true") {
+        BackgroundGeolocation.start();
+        console.log(
+          "BackgroundGeolocation started due to existing clock-in status"
+        );
+      }
     } catch (error) {
       console.error("Error configuring BackgroundGeolocation:", error.message);
     }
@@ -462,7 +411,7 @@ export default function ClockScreen({ navigation }) {
     return {
       time: isoString,
       timezone: timezone,
-      offset: offset / 60, // Hours behind UTC
+      offset: offset / 60,
     };
   };
 
@@ -532,15 +481,6 @@ export default function ClockScreen({ navigation }) {
     AsyncStorage.setItem("storedReceipts", JSON.stringify(updatedReceipts));
   };
 
-  const clearNotesAfterLockout = async () => {
-    try {
-      await AsyncStorage.removeItem("savedNotes");
-      console.log("Notes cleared after lockout.");
-    } catch (error) {
-      console.error("Failed to clear notes:", error);
-    }
-  };
-
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -564,25 +504,23 @@ export default function ClockScreen({ navigation }) {
 
   useEffect(() => {
     let timer;
-    if (ClockedIn && ClockInTime) {
-      const startTime = new Date(ClockInTime).getTime();
+    if (clockInStatus && clockInTime) {
+      const startTime = new Date(clockInTime).getTime();
       if (isNaN(startTime)) {
-        console.error("Invalid ClockInTime:", ClockInTime);
+        console.error("Invalid clockInTime:", clockInTime);
         return;
       }
 
       const updateElapsed = async () => {
-        const storedClockInData = await AsyncStorage.getItem("ClockInData");
+        const storedClockInData = await AsyncStorage.getItem("clockInData");
         const clockInData = storedClockInData
           ? JSON.parse(storedClockInData)
-          : { timezoneOffset: 4 }; // Default to 4 if not present
+          : { timezoneOffset: 4 };
         const timezoneOffset = clockInData.timezoneOffset || 0;
 
-        const now = Date.now(); // Current local time in milliseconds
-        const elapsedTime = Math.floor((now - startTime) / 1000); // Elapsed in seconds
-        console.log("Current local time:", new Date(now).toISOString());
-        console.log("ClockInTime (local):", ClockInTime);
-        console.log("Elapsed time (seconds):", elapsedTime);
+        const now = Date.now();
+        const elapsedTime = Math.floor((now - startTime) / 1000);
+
         setElapsed(elapsedTime > 0 ? elapsedTime : 0);
       };
 
@@ -593,7 +531,7 @@ export default function ClockScreen({ navigation }) {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [ClockedIn, ClockInTime]);
+  }, [clockInStatus, clockInTime]);
 
   const uploadImages = async (timesheetId, imagesArray, route) => {
     if (imagesArray.length === 0) {
@@ -684,7 +622,7 @@ export default function ClockScreen({ navigation }) {
       );
 
       if (response.ok) {
-        console.log("Timesheet updated successfully");
+        console.log("Timesheet updated successfully with locations");
       } else {
         console.error("Failed to update timesheet");
       }
@@ -697,17 +635,15 @@ export default function ClockScreen({ navigation }) {
     try {
       const token = await SecureStore.getItemAsync("authToken");
       const userId = await SecureStore.getItemAsync("userId");
-
       if (!userId || !token) {
-        console.error("Missing userId or token");
-        setClockedIn(initialClockedIn === "true");
+        setClockInStatus(false);
         return;
       }
 
-      let timesheet;
-      if (parsedClockData?.isClockedIn && parsedClockData?.timesheet) {
-        timesheet = parsedClockData.timesheet;
-      } else {
+      const netInfo = await NetInfo.fetch();
+      let timesheet = null;
+
+      if (netInfo.isConnected) {
         const response = await fetch(
           "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/current",
           {
@@ -719,62 +655,93 @@ export default function ClockScreen({ navigation }) {
             },
           }
         );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch current timesheet");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.isClockedIn && data.timesheet) {
+            timesheet = data.timesheet;
+          } else {
+            setClockInStatus(false);
+            await AsyncStorage.setItem("clockInStatus", "false");
+            await AsyncStorage.removeItem("clockInData");
+            await AsyncStorage.removeItem("clockInTime");
+            await AsyncStorage.removeItem("timesheetId");
+            return;
+          }
+        } else {
+          throw new Error("Server error");
         }
-        const data = await response.json();
-        setClockedIn(!!data.isClockedIn);
-        if (!data.isClockedIn || !data.timesheet) return;
-        timesheet = data.timesheet;
+      } else {
+        const storedClockInData = await AsyncStorage.getItem("clockInData");
+        if (storedClockInData) {
+          const clockInData = JSON.parse(storedClockInData);
+          if (clockInData.start && clockInData.timesheetId) {
+            timesheet = {
+              _id: clockInData.timesheetId,
+              start: clockInData.start,
+              projectName: clockInData.projectName,
+              woNumber: clockInData.workOrderId,
+              title: clockInData.title || "N/A",
+              usePersonalVehicle: clockInData.usePersonalVehicle || false,
+            };
+          }
+        }
       }
 
-      console.log("Fetched timesheet start:", timesheet.start);
-      setClockedIn(true);
-      setSelectedProject({
-        projectName: timesheet.projectName || "Unknown Project",
-      });
-      setSelectedWorkOrder({
-        woNumber: timesheet.woNumber || "Unknown WO",
-        title: timesheet.title || "N/A",
-      });
-      setTimesheetId(timesheet._id);
-      setClockInTime(timesheet.start);
-      setUsePersonalVehicle(timesheet.usePersonalVehicle || false);
-
-      const clockInData = {
-        projectId: timesheet.project,
-        workOrderId: timesheet.workOrder,
-        start: timesheet.start,
-        email: timesheet.email,
-        userId: timesheet.user,
-        timesheetId: timesheet._id,
-        locations: timesheet.locations || [],
-        usePersonalVehicle: timesheet.usePersonalVehicle || false,
-        timezone: timesheet.timezone || "America/Toronto",
-        timezoneOffset: timesheet.timezoneOffset || 4,
-        isOnline: true,
-      };
-      await AsyncStorage.setItem("ClockInData", JSON.stringify(clockInData));
-      await AsyncStorage.setItem(
-        "selectedProject",
-        JSON.stringify({ projectName: timesheet.projectName })
-      );
-      await AsyncStorage.setItem(
-        "selectedWorkOrder",
-        JSON.stringify({
-          woNumber: timesheet.woNumber,
+      if (timesheet) {
+        setClockInStatus(true);
+        setSelectedProject({
+          projectName: timesheet.projectName || "Unknown Project",
+        });
+        setSelectedWorkOrder({
+          woNumber: timesheet.woNumber || "Unknown WO",
           title: timesheet.title || "N/A",
-        })
-      );
-      await AsyncStorage.setItem("ClockedIn", JSON.stringify(true));
+        });
+        setTimesheetId(timesheet._id);
+        setClockInTime(timesheet.start);
+        setUsePersonalVehicle(timesheet.usePersonalVehicle || false);
+
+        const clockInData = {
+          start: timesheet.start,
+          timesheetId: timesheet._id,
+          projectName: timesheet.projectName,
+          workOrderId: timesheet.woNumber,
+          title: timesheet.title || "N/A",
+          usePersonalVehicle: timesheet.usePersonalVehicle || false,
+          timezone: timesheet.timezone || "America/Toronto",
+          timezoneOffset: timesheet.timezoneOffset || 4,
+          isOnline: netInfo.isConnected,
+        };
+        await AsyncStorage.setItem("clockInData", JSON.stringify(clockInData));
+        await AsyncStorage.setItem("clockInStatus", "true");
+        if (netInfo.isConnected && isPaid) BackgroundGeolocation.start();
+      } else {
+        setClockInStatus(false);
+      }
     } catch (err) {
       console.error("Error checking clock-in status:", err);
-      setClockedIn(initialClockedIn === "true");
+      setClockInStatus(false);
+      await AsyncStorage.setItem("clockInStatus", "false");
+    }
+  };
+
+  const clearNotesAfterLockout = async () => {
+    try {
+      await AsyncStorage.removeItem("savedNotes");
+      console.log("Notes cleared after lockout.");
+    } catch (error) {
+      console.error("Failed to clear notes:", error);
     }
   };
 
   const handleClockIn = async () => {
+    if (!isPaid) {
+      Alert.alert(
+        "Subscription Required",
+        "You need to be part of a company subscription to clock in and use related features."
+      );
+      return;
+    }
+
     if (!selectedProject || !selectedWorkOrder) {
       Alert.alert(
         "Selection Required",
@@ -804,15 +771,13 @@ export default function ClockScreen({ navigation }) {
         return;
       }
 
-      if (Platform.OS === "android") {
-        const { status: backgroundLocationStatus } =
-          await Location.requestBackgroundPermissionsAsync();
-        if (backgroundLocationStatus !== "granted") {
-          alert("Permission to access background location was denied");
-          setButtonDisabled(false);
-          setErrorMsg("Permission to access background location was denied");
-          return;
-        }
+      const { status: backgroundStatus } =
+        await Location.requestBackgroundPermissionsAsync();
+      if (backgroundStatus !== "granted" && Platform.OS === "android") {
+        console.log(
+          "Background location permission not granted, proceeding anyway"
+        );
+        // Don’t alert or block here; BackgroundGeolocation might still work if "Always" was previously granted
       }
 
       const location = await Location.getCurrentPositionAsync({
@@ -853,21 +818,19 @@ export default function ClockScreen({ navigation }) {
       }
       await AsyncStorage.setItem("locations", JSON.stringify([]));
       const newLocation = {
-        coords: {
-          latitude: userLat,
-          longitude: userLon,
-        },
-        timestamp: new Date(),
+        latitude: userLat,
+        longitude: userLon,
+        timestamp: new Date().toISOString(),
       };
 
       setLocations([newLocation]);
 
-      const now = new Date(); // Local time
-      const localTimeString = now.toISOString().replace(/\.\d{3}Z$/, ".000Z"); // e.g., "2025-03-23T10:31:28.000Z" if 10:31 AM EDT
+      const now = new Date();
+      const localTimeString = now.toISOString().replace(/\.\d{3}Z$/, ".000Z");
       const timeData = getLocalTimeISOString();
 
       setClockInTime(localTimeString);
-      await AsyncStorage.setItem("ClockInTime", localTimeString);
+      await AsyncStorage.setItem("clockInTime", localTimeString);
       setElapsed(0);
 
       const userEmail = await SecureStore.getItemAsync("userEmail");
@@ -875,12 +838,12 @@ export default function ClockScreen({ navigation }) {
       const clockInData = {
         projectId: selectedProject._id,
         workOrderId: selectedWorkOrder._id,
-        start: localTimeString, // Local time
+        start: localTimeString,
         email: userEmail,
         userId: userId,
-        timezone: timeData.timezone, // "America/Toronto"
-        timezoneOffset: timeData.offset, // e.g., 4
-        locations: [{ latitude: userLat, longitude: userLon, timestamp: now }],
+        timezone: timeData.timezone,
+        timezoneOffset: timeData.offset,
+        locations: [newLocation],
         usePersonalVehicle: Boolean(usePersonalVehicle),
         isOnline: true,
       };
@@ -912,16 +875,15 @@ export default function ClockScreen({ navigation }) {
             const timesheetId = responseData.timesheetId;
 
             await AsyncStorage.setItem("timesheetId", timesheetId);
-            await AsyncStorage.setItem("ClockedIn", JSON.stringify(true));
+            await AsyncStorage.setItem("clockInStatus", JSON.stringify(true));
 
             clockInData.timesheetId = timesheetId;
-            clockInData.clockInTime = localTimeString;
             await AsyncStorage.setItem(
-              "ClockInData",
+              "clockInData",
               JSON.stringify(clockInData)
             );
 
-            setClockedIn(true);
+            setClockInStatus(true);
             setIsSelectionLocked(true);
 
             BackgroundGeolocation.onLocation(
@@ -939,6 +901,7 @@ export default function ClockScreen({ navigation }) {
                     "locations",
                     JSON.stringify(locationsArray)
                   );
+
                   await postLocationsToServer(locationsArray);
                 } catch (error) {
                   console.error(
@@ -955,6 +918,7 @@ export default function ClockScreen({ navigation }) {
             );
 
             BackgroundGeolocation.start();
+            console.log("BackgroundGeolocation started after clock-in");
           } else {
             setButtonDisabled(false);
             throw new Error("Failed to post clock-in data");
@@ -965,13 +929,13 @@ export default function ClockScreen({ navigation }) {
         }
       } else {
         clockInData.isOnline = false;
-        await AsyncStorage.setItem("ClockInData", JSON.stringify(clockInData));
+        await AsyncStorage.setItem("clockInData", JSON.stringify(clockInData));
         Alert.alert(
           "Offline",
           "You are offline. Your clock-in data will be synced when you clock out."
         );
-        await AsyncStorage.setItem("ClockedIn", JSON.stringify(true));
-        setClockedIn(true);
+        await AsyncStorage.setItem("clockInStatus", JSON.stringify(true));
+        setClockInStatus(true);
         setIsSelectionLocked(true);
         setButtonDisabled(false);
       }
@@ -997,27 +961,21 @@ export default function ClockScreen({ navigation }) {
 
     await loadDetails();
 
-    const clockInData = JSON.parse(await AsyncStorage.getItem("ClockInData"));
+    const clockInData = JSON.parse(await AsyncStorage.getItem("clockInData"));
     if (!clockInData) {
-      console.error("No ClockInData found for clock-out");
+      console.error("No clockInData found for clock-out");
       setButtonDisabled(false);
       setIsSelectionLocked(false);
       return;
     }
 
-    const now = new Date(); // Local time
-    const clockOutTime = now.toISOString().replace(/\.\d{3}Z$/, ".000Z"); // Local clock-out time
+    const now = new Date();
+    const clockOutTime = now.toISOString().replace(/\.\d{3}Z$/, ".000Z");
     console.log("Clocking out at local time:", clockOutTime);
 
     const userEmail = await SecureStore.getItemAsync("userEmail");
     const storedLocations = await AsyncStorage.getItem("locations");
     const locationData = storedLocations ? JSON.parse(storedLocations) : [];
-
-    const locationDataArray = locationData.map((location) => ({
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      timestamp: location.timestamp,
-    }));
 
     const offlineId = `offline-${Date.now()}`;
     const timeData = getLocalTimeISOString();
@@ -1027,10 +985,10 @@ export default function ClockScreen({ navigation }) {
       end: clockOutTime,
       clockInStatus: false,
       email: userEmail,
-      userId: userId,
+      user: userId,
       timezone: timeData.timezone,
       timezoneOffset: clockInData.timezoneOffset || timeData.offset,
-      locations: locationDataArray,
+      locations: locationData,
       workOrderDescription: inputText,
     };
 
@@ -1043,9 +1001,9 @@ export default function ClockScreen({ navigation }) {
         end: clockOutTime,
         clockInStatus: false,
         email: userEmail,
-        userId: userId,
+        user: userId,
         offlineId,
-        locations: locationDataArray,
+        locations: locationData,
         workOrderDescription: inputText,
       };
 
@@ -1080,7 +1038,7 @@ export default function ClockScreen({ navigation }) {
         offlineReceipts.push(...receiptsToUpload);
         await AsyncStorage.setItem(
           "offlineReceipts",
-          JSON.stringify(offlineReceipts)
+          JSON.stringify(offlinereceipts)
         );
 
         Alert.alert(
@@ -1102,7 +1060,7 @@ export default function ClockScreen({ navigation }) {
                 "X-User-ID": userId,
               },
               body: JSON.stringify({
-                userId: userId,
+                user: userId,
                 end: clockOutTime,
                 timezone: timeData.timezone,
                 timezoneOffset: clockInData.timezoneOffset || timeData.offset,
@@ -1145,11 +1103,11 @@ export default function ClockScreen({ navigation }) {
         }
       }
 
-      await AsyncStorage.setItem("ClockedIn", "false");
-      await AsyncStorage.removeItem("ClockInTime");
+      await AsyncStorage.setItem("clockInStatus", "false");
+      await AsyncStorage.removeItem("clockInTime");
       await AsyncStorage.removeItem("timesheetId");
       await AsyncStorage.setItem("locations", JSON.stringify([]));
-      await AsyncStorage.removeItem("ClockInData");
+      await AsyncStorage.removeItem("clockInData");
       await AsyncStorage.removeItem("selectedProject");
       await AsyncStorage.removeItem("selectedWorkOrder");
 
@@ -1164,12 +1122,15 @@ export default function ClockScreen({ navigation }) {
       await clearNotesAfterLockout();
 
       setModalVisible(false);
-      setClockedIn(false);
+      setClockInStatus(false);
       setClockInTime(null);
       setElapsed(0);
       setButtonDisabled(false);
       setInputText("");
       setIsSelectionLocked(false);
+
+      BackgroundGeolocation.stop();
+      console.log("BackgroundGeolocation stopped after clock-out");
 
       console.log("Clock-out completed");
     } catch (error) {
@@ -1182,8 +1143,8 @@ export default function ClockScreen({ navigation }) {
   const saveDetails = async () => {
     try {
       await AsyncStorage.multiSet([
-        ["ClockedIn", JSON.stringify(ClockedIn)],
-        ["ClockInTime", JSON.stringify(ClockInTime)],
+        ["clockInStatus", JSON.stringify(clockInStatus)],
+        ["clockInTime", JSON.stringify(clockInTime)],
       ]);
       console.log("Details saved");
     } catch (error) {
@@ -1203,11 +1164,20 @@ export default function ClockScreen({ navigation }) {
   };
 
   const openCameraModal = (type) => {
+    if (!isPaid) {
+      Alert.alert(
+        "Subscription Required",
+        "You need to be part of a company subscription to use the camera features."
+      );
+      return;
+    }
     setSelectedType(type);
     setCameraModalVisible(true);
   };
 
   const handleCapturePhoto = async () => {
+    if (!isPaid) return; // Shouldn't reach here due to openCameraModal check, but added for safety
+
     if (!permission?.granted) {
       const { status } = await Camera.requestCameraPermissionsAsync();
       if (status !== "granted") {
@@ -1293,6 +1263,14 @@ export default function ClockScreen({ navigation }) {
   };
 
   const handleSelectFromLibrary = async () => {
+    if (!isPaid) {
+      Alert.alert(
+        "Subscription Required",
+        "You need to be part of a company subscription to use the gallery features."
+      );
+      return;
+    }
+
     try {
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1421,7 +1399,7 @@ export default function ClockScreen({ navigation }) {
                 </Text>
               </View>
 
-              {!ClockedIn && (
+              {!clockInStatus && (
                 <>
                   <View style={tw`mx-2 mt-6`}>
                     <TouchableOpacity
@@ -1518,7 +1496,7 @@ export default function ClockScreen({ navigation }) {
                 </>
               )}
 
-              {ClockedIn && (
+              {clockInStatus && isPaid && (
                 <>
                   <View style={tw`flex-row justify-between my-3`}>
                     <TouchableOpacity
@@ -1829,7 +1807,7 @@ export default function ClockScreen({ navigation }) {
             <View style={tw`mt-4 pb-4 px-5`}>
               <TouchableOpacity
                 onPress={() => {
-                  if (ClockedIn) {
+                  if (clockInStatus) {
                     if (!inputText.trim()) {
                       Alert.alert(
                         "Add Notes",
@@ -1845,13 +1823,13 @@ export default function ClockScreen({ navigation }) {
                 }}
                 style={[
                   tw`self-center w-52 py-3 rounded-xl shadow-md`,
-                  ClockedIn ? tw`bg-red-700` : tw`bg-green-700`,
+                  clockInStatus ? tw`bg-red-700` : tw`bg-green-700`,
                   buttonDisabled && tw`opacity-50`,
                 ]}
                 activeOpacity={buttonDisabled ? 1 : 0.8}
                 disabled={buttonDisabled}
               >
-                {ClockedIn ? (
+                {clockInStatus ? (
                   <View style={tw`flex-row items-center justify-center`}>
                     <Text style={tw`text-[18px] text-white font-semibold`}>
                       Clock Out

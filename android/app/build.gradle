@@ -85,9 +85,6 @@ android {
 Project background_geolocation = project(':react-native-background-geolocation')
 apply from: "${background_geolocation.projectDir}/app.gradle"
 // @generated end react-native-background-geolocation-project
-// @generated begin react-native-background-fetch-project - expo prebuild (DO NOT MODIFY) sync-56d2d70cbc3f26369dd5e711d0ab87bf3c0aebb3
-Project background_fetch = project(':react-native-background-fetch')
-// @generated end react-native-background-fetch-project
     ndkVersion rootProject.ext.ndkVersion
 
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -99,7 +96,7 @@ Project background_fetch = project(':react-native-background-fetch')
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.2"
+        versionName "1.0.19"
     }
     signingConfigs {
         debug {

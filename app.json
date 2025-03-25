@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLDERA",
     "slug": "BLDERA",
-    "version": "1.0.2",
+    "version": "1.0.19",
     "entryPoint": "src/App.js",
     "scheme": "bldera",
     "orientation": "portrait",
@@ -13,11 +13,15 @@
       "backgroundColor": "#ffffff"
     },
     "updates": {
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/685d4a7e-32ee-4faa-a9b1-6aa1dac586f1"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "bundleIdentifier": "com.bldera",
+      "config": {
+        "usesAppleSignIn": true
+      },
       "supportsTablet": true,
       "buildNumber": "1",
       "infoPlist": {
@@ -28,11 +32,8 @@
         "NSLocationWhenInUseUsageDescription": "Allow BLDERA app to track your location in the background during clock-in.",
         "NSPhotoLibraryUsageDescription": "BLDERA app requires access to your photos to upload bills.",
         "NSPhotoLibraryAddUsageDescription": "BLDERA app needs permission to save photos to your library.",
-        "UIBackgroundModes": ["location", "fetch", "processing"],
-        "BGTaskSchedulerPermittedIdentifiers": [
-          "com.transistorsoft.fetch",
-          "com.transistorsoft.customtask"
-        ]
+        "UIBackgroundModes": ["location", "processing"],
+        "BGTaskSchedulerPermittedIdentifiers": ["com.transistorsoft.customtask"]
       }
     },
     "android": {
@@ -45,32 +46,33 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "CAMERA",
-        "ACTIVITY_RECOGNITION"
+        "ACTIVITY_RECOGNITION",
+        "ACCESS_MEDIA_LOCATION"
       ]
     },
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow this app to access your camera."
+          "cameraPermission": "Allow BLDERA to use your camera to take and upload photos directly to your timesheet."
         }
       ],
       ["expo-location"],
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow BLDERA app to access your photos.",
-          "savePhotosPermission": "Allow BLDERA app to save photos.",
+          "photosPermission": "Allow BLDERA to access your photos so you can select and upload them to your timesheet.",
+          "savePhotosPermission": "Allow BLDERA to save photos to your device for easy uploading to your timesheet.",
           "isAccessMediaLocationEnabled": true
         }
       ],
       [
         "react-native-background-geolocation",
         {
-          "license": ""
+          "license": "652b8025a4eaf64424e1978553954e745c1e0d3b59173e04fe7a17b36cf87c6f"
         }
       ],
       [
@@ -80,9 +82,15 @@
           "appCompatVersion": "1.4.2"
         }
       ],
-      "react-native-background-fetch",
       "expo-secure-store",
       "expo-localization"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "685d4a7e-32ee-4faa-a9b1-6aa1dac586f1"
+      }
+    },
+    "owner": "haroutisonfire",
+    "runtimeVersion": "1.0.0"
   }
 }

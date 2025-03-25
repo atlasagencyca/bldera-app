@@ -8,16 +8,32 @@ import {
   Image,
   TouchableOpacity,
   SafeAreaView,
+  Platform,
 } from "react-native";
 import * as AuthSession from "expo-auth-session";
 import * as SecureStore from "expo-secure-store";
+import * as AppleAuthentication from "expo-apple-authentication";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Updates from "expo-updates";
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import tw from "twrnc";
 
+// Configure notification handler for foreground notifications
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 const tenantID = "9d6df540-19fa-4585-8615-37183a530b0f";
 const clientID = "a6dd00fe-d3e8-4540-927a-e42f5046e5cb";
-const redirectUrl = "bldera://redirect";
+const redirectUrl = "msauth.com.bldera://auth";
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(true);
@@ -26,9 +42,42 @@ export default function LoginScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    getSession();
-    checkAuth();
+    const initialize = async () => {
+      try {
+        await checkForUpdates();
+        await getSession();
+        await checkAuth();
+      } catch (error) {
+        console.error("Initialization error:", error);
+        setLoading(false);
+      }
+    };
+    initialize();
   }, []);
+
+  const checkForUpdates = async () => {
+    try {
+      if (__DEV__) {
+        console.log("Skipping update check in development mode");
+        return;
+      }
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        console.log("New update available, fetching...");
+        await Updates.fetchUpdateAsync();
+        console.log("Update fetched, reloading app...");
+        await Updates.reloadAsync();
+      } else {
+        console.log("No updates available");
+      }
+    } catch (error) {
+      console.error("Error checking for updates:", error);
+      Alert.alert(
+        "Update Check Failed",
+        "Unable to check for updates. Continuing with current version."
+      );
+    }
+  };
 
   const getSession = async () => {
     try {
@@ -55,26 +104,167 @@ export default function LoginScreen() {
       await SecureStore.deleteItemAsync("userEmail");
       await SecureStore.deleteItemAsync("userId");
       Alert.alert("Setup Error", "Failed to initialize authentication.");
-    } finally {
-      setLoading(false);
     }
   };
 
   const checkAuth = async () => {
     try {
       const token = await SecureStore.getItemAsync("authToken");
-      if (token) {
-        const response = await fetch(
-          "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/current",
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const data = await response.json();
-        router.replace("/(tabs)/clock-in-out");
+      const userId = await SecureStore.getItemAsync("userId");
+
+      if (!token || !userId) {
+        console.log("No existing auth token or userId found, prompting login");
+        setLoading(false);
+        return;
       }
+
+      const response = await fetch(
+        "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/current",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "X-User-ID": userId,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch current timesheet");
+      }
+
+      const clockData = await response.json();
+      const clockedIn = !!clockData.clockInStatus;
+
+      if (clockedIn && clockData.timesheet) {
+        await SecureStore.setItemAsync("clockInStatus", JSON.stringify(true));
+        await SecureStore.setItemAsync(
+          "clockInTime",
+          clockData.timesheet.start
+        );
+        await SecureStore.setItemAsync("timesheetId", clockData.timesheet._id);
+        await SecureStore.setItemAsync(
+          "clockInData",
+          JSON.stringify({
+            start: clockData.timesheet.start,
+            email: clockData.timesheet.email,
+            user: clockData.timesheet.user,
+            timesheetId: clockData.timesheet._id,
+            locations: clockData.timesheet.locations || [],
+            usePersonalVehicle: clockData.timesheet.usePersonalVehicle || false,
+            timezone: clockData.timesheet.timezone || "America/Toronto",
+            timezoneOffset: clockData.timesheet.timezoneOffset || 4,
+            isOnline: true,
+          })
+        );
+        await SecureStore.setItemAsync(
+          "selectedProject",
+          JSON.stringify({ projectName: clockData.timesheet.projectName })
+        );
+        await SecureStore.setItemAsync(
+          "selectedWorkOrder",
+          JSON.stringify({
+            woNumber: clockData.timesheet.woNumber,
+            title: clockData.timesheet.title || "N/A",
+          })
+        );
+      } else {
+        await SecureStore.setItemAsync("clockInStatus", JSON.stringify(false));
+      }
+
+      await registerForPushNotifications(token, userId);
+
+      router.replace({
+        pathname: "(tabs)/clock-in-out",
+        params: {
+          clockedIn: clockedIn.toString(),
+          clockData: JSON.stringify(clockData),
+        },
+      });
     } catch (error) {
-      console.error("Error checking auth:", error);
+      console.error("Error checking auth or timesheet:", error);
+      await SecureStore.deleteItemAsync("authToken");
+      await SecureStore.deleteItemAsync("userName");
+      await SecureStore.deleteItemAsync("userEmail");
+      await SecureStore.deleteItemAsync("userId");
+      await SecureStore.deleteItemAsync("clockInStatus");
+      await SecureStore.deleteItemAsync("clockInTime");
+      await SecureStore.deleteItemAsync("timesheetId");
+      await SecureStore.deleteItemAsync("clockInData");
+      await SecureStore.deleteItemAsync("selectedProject");
+      await SecureStore.deleteItemAsync("selectedWorkOrder");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const registerForPushNotifications = async (token, userId) => {
+    try {
+      if (!Device.isDevice) {
+        console.log("Push notifications require a physical device.");
+        return;
+      }
+
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Please enable notifications in your device settings."
+        );
+        return;
+      }
+
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      if (!projectId) {
+        throw new Error("Project ID not found in app config.");
+      }
+
+      const pushToken = await Notifications.getExpoPushTokenAsync({
+        projectId,
+      });
+      const expoPushToken = pushToken.data;
+
+      // Send token to backend
+      const response = await fetch(
+        "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/register-push-token",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "X-User-ID": userId,
+          },
+          body: JSON.stringify({ expoPushToken, userId }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Failed to register push token:", errorData.message);
+      } else {
+        console.log("Expo Push Token registered:", expoPushToken);
+      }
+
+      // Android channel setup
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("default", {
+          name: "Default",
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#FF231F7C",
+        });
+      }
+    } catch (error) {
+      console.error("Error registering for push notifications:", error);
     }
   };
 
@@ -136,11 +326,76 @@ export default function LoginScreen() {
     }
   };
 
+  const handleAppleLogin = async () => {
+    try {
+      setLoading(true);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      const { identityToken, email, fullName } = credential;
+      if (!identityToken) throw new Error("Missing identity token");
+
+      const displayName = fullName?.givenName
+        ? `${fullName.givenName} ${fullName.familyName || ""}`.trim()
+        : "User";
+      const appleId = credential.user;
+
+      const backendResponse = await fetch(
+        "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/auth/login-apple",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appleId, email, displayName, identityToken }),
+        }
+      );
+      const backendData = await backendResponse.json();
+
+      if (
+        !backendData.success &&
+        backendData.message.includes("Contact your admin")
+      ) {
+        Alert.alert(
+          "Company Assignment Needed",
+          "Your account has been created. Please contact your admin to assign a company."
+        );
+        return;
+      }
+
+      if (!backendData.success)
+        throw new Error(backendData.message || "Apple login failed");
+      await handleLoginSuccess(backendData);
+    } catch (error) {
+      console.error("Apple login error:", error);
+      Alert.alert(
+        "Login Error",
+        error.message || "Failed to log in with Apple"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLoginSuccess = async (data) => {
-    if (data.user.role !== "foreman" && data.user.role !== "admin") {
-      Alert.alert("Access Denied", "You must be an admin or foreman.");
+    const allowedRoles = [
+      "admin",
+      "foreman",
+      "site_worker",
+      "estimator",
+      "project_manager",
+    ];
+
+    if (!allowedRoles.includes(data.user.role)) {
+      Alert.alert(
+        "Access Denied",
+        "You must be an admin, foreman, site worker, estimator, or project manager to login."
+      );
       return;
     }
+
     await SecureStore.setItemAsync("authToken", data.token);
     await SecureStore.setItemAsync("userName", data.user.displayName);
     await SecureStore.setItemAsync("userEmail", data.user.email);
@@ -148,10 +403,60 @@ export default function LoginScreen() {
 
     const clockResponse = await fetch(
       "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/current",
-      { headers: { Authorization: `Bearer ${data.token}` } }
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.token}`,
+          "X-User-ID": data.user.id,
+        },
+      }
     );
     const clockData = await clockResponse.json();
-    router.replace("/(tabs)/clock-in-out");
+    const clockedIn = !!clockData.clockInStatus;
+
+    if (clockedIn && clockData.timesheet) {
+      await SecureStore.setItemAsync("clockInStatus", JSON.stringify(true));
+      await SecureStore.setItemAsync("clockInTime", clockData.timesheet.start);
+      await SecureStore.setItemAsync("timesheetId", clockData.timesheet._id);
+      await SecureStore.setItemAsync(
+        "clockInData",
+        JSON.stringify({
+          start: clockData.timesheet.start,
+          email: clockData.timesheet.email,
+          user: clockData.timesheet.user,
+          timesheetId: clockData.timesheet._id,
+          locations: clockData.timesheet.locations || [],
+          usePersonalVehicle: clockData.timesheet.usePersonalVehicle || false,
+          timezone: clockData.timesheet.timezone || "America/Toronto",
+          timezoneOffset: clockData.timesheet.timezoneOffset || 4,
+          isOnline: true,
+        })
+      );
+      await SecureStore.setItemAsync(
+        "selectedProject",
+        JSON.stringify({ projectName: clockData.timesheet.projectName })
+      );
+      await SecureStore.setItemAsync(
+        "selectedWorkOrder",
+        JSON.stringify({
+          woNumber: clockData.timesheet.woNumber,
+          title: clockData.timesheet.title || "N/A",
+        })
+      );
+    } else {
+      await SecureStore.setItemAsync("clockInStatus", JSON.stringify(false));
+    }
+
+    // Register for push notifications after successful login
+    await registerForPushNotifications(data.token, data.user.id);
+
+    router.replace({
+      pathname: "(tabs)/clock-in-out",
+      params: {
+        clockedIn: clockedIn.toString(),
+        clockData: JSON.stringify(clockData),
+      },
+    });
   };
 
   if (loading) {
@@ -199,12 +504,20 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={tw`bg-blue-500 rounded-xl py-4 px-6 flex-row items-center justify-center w-full max-w-sm shadow-lg`}
+          style={tw`bg-blue-500 rounded-xl py-4 px-6 flex-row items-center justify-center shadow-lg mb-4 w-full max-w-sm`}
           onPress={() => router.push("/email-login")}
         >
           <Feather name="mail" size={24} color="white" style={tw`mr-3`} />
           <Text style={tw`text-white text-lg font-medium`}>Email Login</Text>
         </TouchableOpacity>
+
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+          cornerRadius={12}
+          style={tw`w-full max-w-sm h-14 shadow-lg`}
+          onPress={handleAppleLogin}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
