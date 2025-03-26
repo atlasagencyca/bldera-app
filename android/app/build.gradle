@@ -96,7 +96,7 @@ apply from: "${background_geolocation.projectDir}/app.gradle"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.19"
+        versionName "1.0.21"
     }
     signingConfigs {
         debug {

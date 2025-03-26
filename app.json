@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLDERA",
     "slug": "BLDERA",
-    "version": "1.0.19",
+    "version": "1.0.21",
     "entryPoint": "src/App.js",
     "scheme": "bldera",
     "orientation": "portrait",
@@ -25,14 +25,14 @@
       "supportsTablet": true,
       "buildNumber": "1",
       "infoPlist": {
+        "NSLocationAlwaysUsageDescription": "BLDERA uses your location in the background when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, as well as to accurately track your work time on job sites.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BLDERA uses your location when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, and to accurately track your work time on job sites, both while the app is in use and running in the background.",
+        "NSLocationWhenInUseUsageDescription": "BLDERA uses your location when the app is in use to verify you’re at the job site when clocking in and to track your work time accurately.",
+        "NSMotionUsageDescription": "BLDERA uses motion data when clocked in to detect falls for your safety, triggering an emergency response if needed, and to optimize battery life by adjusting location tracking based on your activity.",
         "NSCameraUsageDescription": "This app uses the camera to take photos.",
-        "NSLocationAlwaysUsageDescription": "Allow BLDERA app to track your location in the background during clock-in.",
-        "NSMotionUsageDescription": "Allow BLDERA app to track movements to help improve battery life during clock in state.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow BLDERA app to track your location in the background during clock-in.",
-        "NSLocationWhenInUseUsageDescription": "Allow BLDERA app to track your location in the background during clock-in.",
         "NSPhotoLibraryUsageDescription": "BLDERA app requires access to your photos to upload bills.",
         "NSPhotoLibraryAddUsageDescription": "BLDERA app needs permission to save photos to your library.",
-        "UIBackgroundModes": ["location", "processing"],
+        "UIBackgroundModes": ["location", "processing", "fetch"],
         "BGTaskSchedulerPermittedIdentifiers": ["com.transistorsoft.customtask"]
       }
     },

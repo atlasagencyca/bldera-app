@@ -25,7 +25,7 @@
     <key>CFBundlePackageType</key>
     <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.19</string>
+    <string>1.0.21</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleURLTypes</key>
@@ -62,15 +62,15 @@
     <key>NSFaceIDUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow BLDERA app to track your location in the background during clock-in.</string>
+    <string>BLDERA uses your location when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, and to accurately track your work time on job sites, both while the app is in use and running in the background.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow BLDERA app to track your location in the background during clock-in.</string>
+    <string>BLDERA uses your location in the background when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, as well as to accurately track your work time on job sites.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Allow BLDERA app to track your location in the background during clock-in.</string>
+    <string>BLDERA uses your location when the app is in use to verify you’re at the job site when clocking in and to track your work time accurately.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSMotionUsageDescription</key>
-    <string>Allow BLDERA app to track movements to help improve battery life during clock in state.</string>
+    <string>BLDERA uses motion data when clocked in to detect falls for your safety, triggering an emergency response if needed, and to optimize battery life by adjusting location tracking based on your activity.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Allow BLDERA to save photos to your device for easy uploading to your timesheet.</string>
     <key>NSPhotoLibraryUsageDescription</key>
@@ -79,6 +79,7 @@
     <array>
       <string>location</string>
       <string>processing</string>
+      <string>fetch</string>
     </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
