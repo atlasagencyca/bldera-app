@@ -25,7 +25,7 @@
     <key>CFBundlePackageType</key>
     <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.21</string>
+    <string>1.0.23</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleURLTypes</key>
@@ -66,7 +66,7 @@
     <key>NSLocationAlwaysUsageDescription</key>
     <string>BLDERA uses your location in the background when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, as well as to accurately track your work time on job sites.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>BLDERA uses your location when the app is in use to verify you’re at the job site when clocking in and to track your work time accurately.</string>
+    <string>BLDERA uses your location when the app is in use to ensure your safety by verifying you’re at the job site when clocking in, while also tracking your work time accurately.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSMotionUsageDescription</key>

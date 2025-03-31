@@ -227,8 +227,6 @@ export default function PieceworkScreen() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      console.log(response);
-
       if (response.ok) {
         const data = await response.json();
 

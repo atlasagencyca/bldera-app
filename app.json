@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLDERA",
     "slug": "BLDERA",
-    "version": "1.0.21",
+    "version": "1.0.23",
     "entryPoint": "src/App.js",
     "scheme": "bldera",
     "orientation": "portrait",
@@ -27,7 +27,7 @@
       "infoPlist": {
         "NSLocationAlwaysUsageDescription": "BLDERA uses your location in the background when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, as well as to accurately track your work time on job sites.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "BLDERA uses your location when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, and to accurately track your work time on job sites, both while the app is in use and running in the background.",
-        "NSLocationWhenInUseUsageDescription": "BLDERA uses your location when the app is in use to verify you’re at the job site when clocking in and to track your work time accurately.",
+        "NSLocationWhenInUseUsageDescription": "BLDERA uses your location when the app is in use to ensure your safety by verifying you’re at the job site when clocking in, while also tracking your work time accurately.",
         "NSMotionUsageDescription": "BLDERA uses motion data when clocked in to detect falls for your safety, triggering an emergency response if needed, and to optimize battery life by adjusting location tracking based on your activity.",
         "NSCameraUsageDescription": "This app uses the camera to take photos.",
         "NSPhotoLibraryUsageDescription": "BLDERA app requires access to your photos to upload bills.",
@@ -91,6 +91,6 @@
       }
     },
     "owner": "haroutisonfire",
-    "runtimeVersion": "1.0.0"
+    "runtimeVersion": "1.0.1"
   }
 }

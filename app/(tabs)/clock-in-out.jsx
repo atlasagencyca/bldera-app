@@ -27,15 +27,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
-import * as Location from "expo-location";
 import * as FileSystem from "expo-file-system";
 import NetInfo from "@react-native-community/netinfo";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackgroundGeolocation from "react-native-background-geolocation";
+import { FALL_DETECTION_TASK, postLocationsToServer } from "../../tasks.js";
+import { Accelerometer } from "expo-sensors";
+import * as TaskManager from "expo-task-manager";
 
-// Haversine formula to calculate distance between two points (in meters)
+// Haversine formula to calculate distance between two pxoints (in meters)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371e3; // Earth radius in meters
   const φ1 = (lat1 * Math.PI) / 180;
@@ -74,6 +76,7 @@ export default function ClockScreen({ navigation }) {
   const [elapsed, setElapsed] = useState(0);
   const [buttonDisabled, setButtonDisabled] = useState(false);
   const [projects, setProjects] = useState([]);
+  const [isFallDetected, setIsFallDetected] = useState(false);
   const [isSelectionLocked, setIsSelectionLocked] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
@@ -136,6 +139,33 @@ export default function ClockScreen({ navigation }) {
     checkPermissions();
   }, [isPaid]);
 
+  useEffect(() => {
+    const checkFallDetectionStatus = async () => {
+      try {
+        const storedFallDetected = await AsyncStorage.getItem("isFallDetected");
+        setIsFallDetected(
+          storedFallDetected ? JSON.parse(storedFallDetected) : false
+        );
+      } catch (error) {
+        console.error("Error polling fall detection status:", error);
+      }
+    };
+
+    // Initial check
+    checkFallDetectionStatus();
+
+    // Poll every 5 seconds when clocked in and paid
+    let intervalId;
+    if (clockInStatus && isPaid) {
+      intervalId = setInterval(checkFallDetectionStatus, 5000); // 5000ms = 5 seconds
+    }
+
+    // Cleanup interval on unmount or when clockInStatus/isPaid changes
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [clockInStatus, isPaid]); // Re-run effect when clockInStatus or isPaid changes
+
   const loadSelections = useCallback(async () => {
     try {
       const storedProject = await AsyncStorage.getItem("selectedProject");
@@ -163,6 +193,46 @@ export default function ClockScreen({ navigation }) {
     }, [])
   );
 
+  useEffect(() => {
+    const manageBackgroundGeolocation = async () => {
+      try {
+        // Check stored clock-in status
+        const storedClockInStatus = await AsyncStorage.getItem("clockInStatus");
+        const isClockedIn = storedClockInStatus === "true";
+        console.log("Clock-in status from storage:", isClockedIn);
+
+        // If not clocked in, ensure BackgroundGeolocation is stopped
+        if (!isClockedIn || !isPaid) {
+          console.log(
+            "User not clocked in or not paid, stopping BackgroundGeolocation"
+          );
+          await BackgroundGeolocation.stop();
+          console.log("BackgroundGeolocation stopped");
+          return;
+        }
+
+        // If clocked in and paid, configure and start BackgroundGeolocation
+        console.log("User clocked in and paid, starting BackgroundGeolocation");
+        await configureBackgroundGeolocation();
+        await BackgroundGeolocation.start();
+        console.log("BackgroundGeolocation started");
+      } catch (error) {
+        console.error("Error managing BackgroundGeolocation:", error.message);
+        // Stop BackgroundGeolocation on error to be safe
+        await BackgroundGeolocation.stop();
+      }
+    };
+
+    // Run the management function
+    manageBackgroundGeolocation();
+
+    // Cleanup: Ensure BackgroundGeolocation is stopped when component unmounts
+    return () => {
+      console.log("Cleaning up: Stopping BackgroundGeolocation on unmount");
+      BackgroundGeolocation.stop();
+    };
+  }, [clockInStatus, isPaid]); // Dependencies: re-run when clockInStatus or isPaid changes
+
   const syncTimesheetUpdates = async () => {
     try {
       const storedClockInStatus = await AsyncStorage.getItem("clockInStatus");
@@ -187,6 +257,10 @@ export default function ClockScreen({ navigation }) {
 
       console.log("Syncing locations to server:", locationsArray.length);
       await postLocationsToServer(locationsArray);
+
+      // Clear only after successful sync to avoid losing data
+      await AsyncStorage.setItem("locations", JSON.stringify([]));
+      setLocations([]); // Reset state after successful sync
     } catch (error) {
       console.error("Error in syncTimesheetUpdates:", error.message);
     }
@@ -308,22 +382,7 @@ export default function ClockScreen({ navigation }) {
 
   const configureBackgroundGeolocation = async () => {
     if (!isPaid) return;
-
     try {
-      const { status: foregroundStatus } =
-        await Location.requestForegroundPermissionsAsync();
-      if (foregroundStatus !== "granted") {
-        console.log("Foreground location permission denied");
-        return;
-      }
-
-      const { status: backgroundStatus } =
-        await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus !== "granted") {
-        console.log("Background location permission denied");
-        return;
-      }
-
       await BackgroundGeolocation.ready({
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 50,
@@ -340,9 +399,7 @@ export default function ClockScreen({ navigation }) {
           priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_HIGH,
           enabled: true,
         },
-        motionActivity: true, // Already included, enhances fall detection context
-      }).then((state) => {
-        console.log("BackgroundGeolocation configured:", state);
+        motionActivity: true,
       });
 
       BackgroundGeolocation.onLocation(
@@ -352,20 +409,31 @@ export default function ClockScreen({ navigation }) {
           );
           if (storedClockInStatus !== "true") return;
 
+          // Create a new location object to append
+          const newLocation = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            timestamp: location.timestamp,
+          };
+
+          // Append to locations state immutably
+          setLocations((prevLocations) => [...prevLocations, newLocation]);
+
+          // Optionally store in AsyncStorage for persistence
           const storedLocations = await AsyncStorage.getItem("locations");
           const locationsArray = storedLocations
             ? JSON.parse(storedLocations)
             : [];
-          locationsArray.push(location);
-          setLocations(locationsArray);
+          const updatedLocations = [...locationsArray, newLocation];
           await AsyncStorage.setItem(
             "locations",
-            JSON.stringify(locationsArray)
+            JSON.stringify(updatedLocations)
           );
 
           const netInfo = await NetInfo.fetch();
           if (netInfo.isConnected) {
-            await postLocationsToServer(locationsArray);
+            // Post a single location update, not the entire array
+            await postLocationsToServer([newLocation]); // Send only the new location
           }
         },
         (error) => {
@@ -373,13 +441,7 @@ export default function ClockScreen({ navigation }) {
         }
       );
 
-      const storedClockInStatus = await AsyncStorage.getItem("clockInStatus");
-      if (storedClockInStatus === "true") {
-        BackgroundGeolocation.start();
-        console.log(
-          "BackgroundGeolocation started due to existing clock-in status"
-        );
-      }
+      console.log("BackgroundGeolocation configured");
     } catch (error) {
       console.error("Error configuring BackgroundGeolocation:", error.message);
     }
@@ -579,40 +641,6 @@ export default function ClockScreen({ navigation }) {
       .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const postLocationsToServer = async (locationsArray) => {
-    try {
-      const timesheetId = await AsyncStorage.getItem("timesheetId");
-      const email = await SecureStore.getItemAsync("userEmail");
-      const token = await SecureStore.getItemAsync("authToken");
-
-      const payload = {
-        timesheetId: timesheetId,
-        email: email,
-        locations: locationsArray,
-      };
-
-      const response = await fetch(
-        "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/timesheets/update-timesheet",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (response.ok) {
-        console.log("Timesheet updated successfully with locations");
-      } else {
-        console.error("Failed to update timesheet");
-      }
-    } catch (error) {
-      console.error(`Error posting locations: ${error.message}`);
-    }
-  };
-
   const checkClockInStatus = async () => {
     try {
       const token = await SecureStore.getItemAsync("authToken");
@@ -758,26 +786,14 @@ export default function ClockScreen({ navigation }) {
         return;
       }
 
-      const { status: locationStatus } =
-        await Location.requestForegroundPermissionsAsync();
-      if (locationStatus !== "granted") {
-        alert("Permission to access location was denied");
-        setErrorMsg("Permission to access location was denied");
-        setButtonDisabled(false);
-        return;
-      }
+      await configureBackgroundGeolocation();
 
-      const { status: backgroundStatus } =
-        await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus !== "granted" && Platform.OS === "android") {
-        console.log(
-          "Background location permission not granted, proceeding anyway"
-        );
-        // Don’t alert or block here; BackgroundGeolocation might still work if "Always" was previously granted
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+      const location = await BackgroundGeolocation.getCurrentPosition({
+        timeout: 30, // 30 second timeout to fetch location
+        persist: true, // Defaults to state.enabled
+        maximumAge: 1000, // Accept the last-known-location if not older than 5000 ms.
+        desiredAccuracy: 10, // Try to fetch a location with an accuracy of `10` meters.
+        samples: 3, // How many location samples to attempt.
       });
       const userLat = location.coords.latitude;
       const userLon = location.coords.longitude;
@@ -867,11 +883,12 @@ export default function ClockScreen({ navigation }) {
 
           if (response.ok) {
             const responseData = await response.json();
-            setButtonDisabled(false);
+
             const timesheetId = responseData.timesheetId;
 
             await AsyncStorage.setItem("timesheetId", timesheetId);
             await AsyncStorage.setItem("clockInStatus", JSON.stringify(true));
+            await AsyncStorage.setItem("isFallDetected", JSON.stringify(false));
 
             clockInData.timesheetId = timesheetId;
             await AsyncStorage.setItem(
@@ -881,40 +898,33 @@ export default function ClockScreen({ navigation }) {
 
             setClockInStatus(true);
             setIsSelectionLocked(true);
+            setIsFallDetected(false); // Reset state
 
-            BackgroundGeolocation.onLocation(
-              async (location) => {
-                try {
-                  const storedLocations = await AsyncStorage.getItem(
-                    "locations"
-                  );
-                  const locationsArray = storedLocations
-                    ? JSON.parse(storedLocations)
-                    : [];
-                  locationsArray.push(location);
-                  setLocations(locationsArray);
-                  await AsyncStorage.setItem(
-                    "locations",
-                    JSON.stringify(locationsArray)
-                  );
-
-                  await postLocationsToServer(locationsArray);
-                } catch (error) {
-                  console.error(
-                    `Error occurred in location task: ${error.message}`
-                  );
-                }
-              },
-              (error) => {
-                console.error(
-                  `Error occurred in location task: ${error.message}`
-                );
-                setButtonDisabled(false);
-              }
-            );
-
+            // Start BackgroundGeolocation
             BackgroundGeolocation.start();
-            console.log("BackgroundGeolocation started after clock-in");
+            console.log("BackgroundGeolocation started");
+
+            const { status: accelStatus } =
+              await Accelerometer.requestPermissionsAsync();
+            if (accelStatus !== "granted") {
+              console.log("Accelerometer permission denied");
+              Alert.alert(
+                "Permission Denied",
+                "Accelerometer access is required for fall detection."
+              );
+            } else {
+              if (!TaskManager.isTaskRegistered(FALL_DETECTION_TASK)) {
+                await TaskManager.registerTaskAsync(FALL_DETECTION_TASK);
+                console.log(`${FALL_DETECTION_TASK} registered`);
+              }
+              Accelerometer.setUpdateInterval(500);
+              Accelerometer.addListener((data) => {
+                TaskManager.dispatchTask(FALL_DETECTION_TASK, data);
+              });
+              console.log("Fall detection started");
+            }
+
+            setButtonDisabled(false);
           } else {
             setButtonDisabled(false);
             throw new Error("Failed to post clock-in data");
@@ -925,18 +935,40 @@ export default function ClockScreen({ navigation }) {
         }
       } else {
         clockInData.isOnline = false;
+
         await AsyncStorage.setItem("clockInData", JSON.stringify(clockInData));
+        await AsyncStorage.setItem("clockInStatus", JSON.stringify(true));
+        await AsyncStorage.setItem("isFallDetected", JSON.stringify(false));
+        setClockInStatus(true);
+        setIsSelectionLocked(true);
+        setIsFallDetected(false); // Reset state
+
+        BackgroundGeolocation.start();
+        console.log("BackgroundGeolocation started (offline)");
+
+        const { status: accelStatus } =
+          await Accelerometer.requestPermissionsAsync();
+        if (accelStatus === "granted") {
+          if (!TaskManager.isTaskRegistered(FALL_DETECTION_TASK)) {
+            await TaskManager.registerTaskAsync(FALL_DETECTION_TASK);
+            console.log(`${FALL_DETECTION_TASK} registered (offline)`);
+          }
+          Accelerometer.setUpdateInterval(500);
+          Accelerometer.addListener((data) => {
+            TaskManager.dispatchTask(FALL_DETECTION_TASK, data);
+          });
+          console.log("Fall detection started (offline)");
+        }
+
         Alert.alert(
           "Offline",
           "You are offline. Your clock-in data will be synced when you clock out."
         );
-        await AsyncStorage.setItem("clockInStatus", JSON.stringify(true));
-        setClockInStatus(true);
-        setIsSelectionLocked(true);
         setButtonDisabled(false);
       }
     } catch (error) {
       console.error("Error during clock-in:", error);
+      BackgroundGeolocation.stop();
       setButtonDisabled(false);
     }
   };
@@ -984,7 +1016,7 @@ export default function ClockScreen({ navigation }) {
       user: userId,
       timezone: timeData.timezone,
       timezoneOffset: clockInData.timezoneOffset || timeData.offset,
-      locations: locationData,
+      locations: [...locationData],
       workOrderDescription: inputText,
     };
 
@@ -999,7 +1031,7 @@ export default function ClockScreen({ navigation }) {
         email: userEmail,
         user: userId,
         offlineId,
-        locations: locationData,
+        locations: [...locationData],
         workOrderDescription: inputText,
       };
 
@@ -1125,8 +1157,17 @@ export default function ClockScreen({ navigation }) {
       setInputText("");
       setIsSelectionLocked(false);
 
+      Accelerometer.removeAllListeners();
+      if (TaskManager.isTaskRegistered(FALL_DETECTION_TASK)) {
+        await TaskManager.unregisterTaskAsync(FALL_DETECTION_TASK);
+        console.log(`${FALL_DETECTION_TASK} unregistered on clock-out`);
+      }
+
       BackgroundGeolocation.stop();
       console.log("BackgroundGeolocation stopped after clock-out");
+
+      await AsyncStorage.setItem("isFallDetected", JSON.stringify(false));
+      setIsFallDetected(false);
 
       console.log("Clock-out completed");
     } catch (error) {
@@ -1705,6 +1746,36 @@ export default function ClockScreen({ navigation }) {
                       </TouchableWithoutFeedback>
                     </TouchableOpacity>
                   </Modal>
+
+                  {clockInStatus && isPaid && (
+                    <View
+                      style={tw`bg-white shadow-md rounded-xl p-4 mx-2 mt-4 flex-row items-center justify-between`}
+                    >
+                      <View style={tw`flex-row items-center`}>
+                        <MaterialIcons
+                          name="person-pin"
+                          size={24}
+                          color={isFallDetected ? "#EF4444" : "#10B981"}
+                          style={tw`mr-2`}
+                        />
+                        <Text
+                          style={tw`text-[16px] text-gray-900 font-semibold`}
+                        >
+                          Fall Detection
+                        </Text>
+                      </View>
+                      <View style={tw`flex-row items-center`}>
+                        <View
+                          style={tw`w-3 h-3 rounded-full mr-2 ${
+                            isFallDetected ? "bg-red-500" : "bg-green-500"
+                          }`}
+                        />
+                        <Text style={tw`text-[14px] text-gray-700`}>
+                          {isFallDetected ? "Fall Detected" : "Active"}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
                   <View style={tw`bg-white shadow-md rounded-xl p-4 mx-2 mt-4`}>
                     <View

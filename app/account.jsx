@@ -9,11 +9,10 @@ import {
   ScrollView,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import tw from "twrnc";
 
-// Utility function to format roles
 const formatRole = (role) => {
   const roleMap = {
     unassigned: "Unassigned",
@@ -23,7 +22,7 @@ const formatRole = (role) => {
     site_worker: "Site Worker",
     estimator: "Estimator",
   };
-  return roleMap[role] || role; // Fallback to raw role if not found in map
+  return roleMap[role] || role;
 };
 
 export default function AccountScreen() {
@@ -35,9 +34,11 @@ export default function AccountScreen() {
     role: "",
     company: { companyName: "" },
     appleId: null,
+    isPaid: false,
+    healthAndSafetyDocs: [],
   });
+  const [crewMembers, setCrewMembers] = useState([]);
   const router = useRouter();
-  const navigation = useNavigation();
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -50,10 +51,8 @@ export default function AccountScreen() {
           throw new Error("Missing email, token, or user ID");
         }
 
-        const response = await fetch(
-          `https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/me/${encodeURIComponent(
-            email
-          )}`,
+        const userResponse = await fetch(
+          `https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/me/${email}`,
           {
             method: "GET",
             headers: {
@@ -64,26 +63,60 @@ export default function AccountScreen() {
           }
         );
 
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!userResponse.ok) {
+          const errorData = await userResponse.json();
           throw new Error(errorData.message || "Failed to fetch user data");
         }
 
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.message || "User fetch unsuccessful");
+        const userData = await userResponse.json();
+
+        if (!userData.success) {
+          throw new Error(userData.message || "User fetch unsuccessful");
         }
 
         setUserData({
-          id: data.user.id || "",
-          displayName: data.user.displayName || "User",
-          email: data.user.email || "",
-          role: data.user.role || "",
-          company: data.user.company || { companyName: "" },
-          appleId: data.user.appleId || null,
+          id: userData.user.id || "",
+          displayName: userData.user.displayName || "User",
+          email: userData.user.email || "",
+          role: userData.user.role || "",
+          company: userData.user.company || { companyName: "" },
+          appleId: userData.user.appleId || null,
+          isPaid: userData.user.isPaid || false,
+          healthAndSafetyDocs: userData.user.healthAndSafetyDocs || [],
         });
+
+        // Fetch crew members only if user is a foreman or admin
+        if (
+          userData.user.role === "foreman" ||
+          userData.user.role === "admin"
+        ) {
+          const crewResponse = await fetch(
+            `https://erp-production-72da01c8e651.herokuapp.com/api/users/`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+                "X-User-ID": userId,
+              },
+            }
+          );
+
+          if (!crewResponse.ok) {
+            const errorData = await crewResponse.json();
+            throw new Error(
+              errorData.message || "Failed to fetch crew members"
+            );
+          }
+
+          const crewData = await crewResponse.json();
+          const siteWorkers = crewData.filter(
+            (member) => member.role === "site_worker" && member.active
+          );
+          setCrewMembers(siteWorkers);
+        }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error("Error fetching data:", error);
         Alert.alert(
           "Error",
           error.message || "Failed to load account information."
@@ -185,7 +218,21 @@ export default function AccountScreen() {
   };
 
   const handleGoBack = () => {
-    navigation.goBack();
+    router.back();
+  };
+
+  const handleViewHealthSafetyDocs = () => {
+    router.push({
+      pathname: "/health-safety-docs",
+      params: { userId: userData.id },
+    });
+  };
+
+  const handleViewCrewMemberDocs = (crewMemberId) => {
+    router.push({
+      pathname: "/health-safety-docs",
+      params: { userId: crewMemberId },
+    });
   };
 
   if (loading) {
@@ -200,6 +247,12 @@ export default function AccountScreen() {
     userData.appleId ||
     userData.email.includes("@privaterelay.appleid.com") ||
     userData.email.includes("@anonymous.bldera.com");
+  const canInvite =
+    (userData.role === "admin" || userData.role === "foreman") &&
+    userData.isPaid;
+  const canViewCrew =
+    (userData.role === "admin" || userData.role === "foreman") &&
+    userData.isPaid;
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-50`}>
@@ -239,7 +292,6 @@ export default function AccountScreen() {
               {formatRole(userData.role)}
             </Text>
           </View>
-
           {isAnonymousAppleUser && (
             <Text style={tw`text-sm text-gray-500 italic mt-2`}>
               Signed in with an anonymous or Apple ID
@@ -247,10 +299,77 @@ export default function AccountScreen() {
           )}
         </View>
 
+        {/* Health & Safety Documents Section */}
+        <View style={tw`bg-white rounded-xl shadow-md p-5 mb-6`}>
+          <Text style={tw`text-xl font-semibold text-gray-900 mb-4`}>
+            Health & Safety Documents
+          </Text>
+          <TouchableOpacity
+            style={tw`flex-row items-center bg-blue-600 py-3 px-4 rounded-lg`}
+            onPress={handleViewHealthSafetyDocs}
+          >
+            <Feather
+              name="file-text"
+              size={20}
+              color="white"
+              style={tw`mr-3`}
+            />
+            <Text style={tw`text-white text-base font-medium`}>
+              View Documents
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* My Crew Section (Only for Foreman/Admin) */}
+        {canViewCrew && (
+          <View style={tw`bg-white rounded-xl shadow-md p-5 mb-6`}>
+            <Text style={tw`text-xl font-semibold text-gray-900 mb-4`}>
+              My Crew
+            </Text>
+            {crewMembers.length > 0 ? (
+              crewMembers.map((member) => (
+                <TouchableOpacity
+                  key={member._id}
+                  style={tw`flex-row items-center justify-between py-3 border-b border-gray-200`}
+                  onPress={() => handleViewCrewMemberDocs(member._id)}
+                >
+                  <View>
+                    <Text style={tw`text-lg text-gray-900`}>
+                      {member.displayName}
+                    </Text>
+                    <Text style={tw`text-sm text-gray-500`}>
+                      {formatRole(member.role)}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color="#374151" />
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={tw`text-gray-500`}>No site workers found.</Text>
+            )}
+          </View>
+        )}
+
         <View style={tw`bg-white rounded-xl shadow-md p-5`}>
           <Text style={tw`text-xl font-semibold text-gray-900 mb-4`}>
             Actions
           </Text>
+          {canInvite && (
+            <TouchableOpacity
+              style={tw`flex-row items-center bg-blue-600 py-3 px-4 rounded-lg mb-3`}
+              onPress={() => router.push("/invite-user")}
+            >
+              <Feather
+                name="user-plus"
+                size={20}
+                color="white"
+                style={tw`mr-3`}
+              />
+              <Text style={tw`text-white text-base font-medium`}>
+                Invite User
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={tw`flex-row items-center bg-blue-600 py-3 px-4 rounded-lg mb-3`}
             onPress={handleSignOut}

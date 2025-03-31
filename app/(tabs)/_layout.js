@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Text } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
@@ -180,6 +180,16 @@ export default function TabLayout() {
           title: "Material Orders",
           tabBarIcon: ({ color }) => (
             <Feather name="package" size={24} color={color} />
+          ),
+          tabBarButton: isSiteWorker ? () => null : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="progressLogScreen"
+        options={{
+          title: "Progress Logs",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="journal-sharp" size={24} color={color} />
           ),
           tabBarButton: isSiteWorker ? () => null : undefined,
         }}
