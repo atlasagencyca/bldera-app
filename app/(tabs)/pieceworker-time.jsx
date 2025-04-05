@@ -116,34 +116,23 @@ export default function PieceworkScreen() {
   );
 
   useEffect(() => {
-    const fetchUserRole = async () => {
+    const loadUserRole = async () => {
       try {
-        const userEmail = await SecureStore.getItemAsync("email");
-        const token = await SecureStore.getItemAsync("authToken");
-
-        if (!userEmail || !token) {
-          setUserRole("unassigned");
-          return;
-        }
-        const response = await fetch(
-          `https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/me/${userEmail}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setUserRole(data.user.role || "unassigned");
+        console.log("Loading user role from SecureStore..."); // Debug log
+        const storedRole = await SecureStore.getItemAsync("userRole");
+        console.log("Stored Role:", storedRole); // Debug log
+        if (storedRole) {
+          setUserRole(storedRole);
         } else {
-          setUserRole("unassigned");
+          console.warn("No user role found in SecureStore");
+          setUserRole("unassigned"); // Fallback if not found
         }
       } catch (error) {
-        console.error("Error fetching user role:", error);
+        console.error("Error loading user role from SecureStore:", error);
         setUserRole("unassigned");
       }
     };
-    fetchUserRole();
+    loadUserRole();
   }, []);
 
   const loadProjects = async () => {
@@ -927,20 +916,19 @@ export default function PieceworkScreen() {
 
             {historyTab === "pending" && (
               <>
-                {userRole === "admin" ||
-                  (userRole === "foreman" && (
-                    <TouchableOpacity
-                      style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-green-500 shadow-md`}
-                      onPress={() => handleApproveLog(selectedLog._id)}
+                {userRole === "admin" && (
+                  <TouchableOpacity
+                    style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-green-500 shadow-md`}
+                    onPress={() => handleApproveLog(selectedLog._id)}
+                  >
+                    <FontAwesome name="check" size={20} color="#10b981" />
+                    <Text
+                      style={tw`text-[18px] text-green-600 ml-3 font-semibold flex-1`}
                     >
-                      <FontAwesome name="check" size={20} color="#10b981" />
-                      <Text
-                        style={tw`text-[18px] text-green-600 ml-3 font-semibold flex-1`}
-                      >
-                        Approve Worksheet
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                      Approve Worksheet
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={tw`flex-row items-center bg-white rounded-full p-4 mt-4 border border-red-500 shadow-md`}
                   onPress={() => handleRejectLog(selectedLog._id)}

@@ -77,10 +77,21 @@ export default function EmailLoginScreen() {
   };
 
   const handleLoginSuccess = async (data) => {
-    if (data.user.role !== "foreman" && data.user.role !== "admin") {
-      Alert.alert("Access Denied", "You must be an admin or foreman.");
+    const allowedRoles = [
+      "foreman",
+      "site_worker",
+      "estimator",
+      "project_manager",
+    ];
+
+    if (!allowedRoles.includes(data.user.role)) {
+      Alert.alert(
+        "Access Denied",
+        "You must be an admin, foreman, site worker, estimator, or project manager to login."
+      );
       return;
     }
+
     await SecureStore.setItemAsync("authToken", data.token);
     await SecureStore.setItemAsync("userName", data.user.displayName);
     await SecureStore.setItemAsync("userEmail", data.user.email);

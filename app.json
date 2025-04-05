@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLDERA",
     "slug": "BLDERA",
-    "version": "1.0.23",
+    "version": "1.0.24",
     "entryPoint": "src/App.js",
     "scheme": "bldera",
     "orientation": "portrait",
@@ -23,7 +23,6 @@
         "usesAppleSignIn": true
       },
       "supportsTablet": true,
-      "buildNumber": "1",
       "infoPlist": {
         "NSLocationAlwaysUsageDescription": "BLDERA uses your location in the background when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, as well as to accurately track your work time on job sites.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "BLDERA uses your location when clocked in to ensure your safety by detecting falls and enabling rapid emergency response, and to accurately track your work time on job sites, both while the app is in use and running in the background.",

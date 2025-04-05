@@ -31,7 +31,6 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const tenantID = "9d6df540-19fa-4585-8615-37183a530b0f";
 const clientID = "a6dd00fe-d3e8-4540-927a-e42f5046e5cb";
 const redirectUrl = "msauth.com.bldera://auth";
 
@@ -81,15 +80,16 @@ export default function LoginScreen() {
 
   const getSession = async () => {
     try {
+      // Use the common endpoint for multi-tenant authentication
       const discoveryDoc = await AuthSession.fetchDiscoveryAsync(
-        `https://login.microsoftonline.com/${tenantID}/v2.0`
+        "https://login.microsoftonline.com/common/v2.0"
       );
       setDiscovery(discoveryDoc);
 
       const authRequestOptions = {
         prompt: AuthSession.Prompt.Login,
         responseType: AuthSession.ResponseType.Code,
-        scopes: ["openid", "profile", "email"],
+        scopes: ["openid", "profile", "email", "User.Read"], // Match frontend scopes
         usePKCE: true,
         clientId: clientID,
         redirectUri: redirectUrl,
@@ -233,7 +233,6 @@ export default function LoginScreen() {
       });
       const expoPushToken = pushToken.data;
 
-      // Send token to backend
       const response = await fetch(
         "https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/register-push-token",
         {
@@ -254,7 +253,6 @@ export default function LoginScreen() {
         console.log("Expo Push Token registered:", expoPushToken);
       }
 
-      // Android channel setup
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("default", {
           name: "Default",
@@ -398,6 +396,7 @@ export default function LoginScreen() {
 
     await SecureStore.setItemAsync("authToken", data.token);
     await SecureStore.setItemAsync("userName", data.user.displayName);
+    await SecureStore.setItemAsync("userRole", data.user.role);
     await SecureStore.setItemAsync("userEmail", data.user.email);
     await SecureStore.setItemAsync("userId", data.user.id);
 
@@ -447,7 +446,6 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync("clockInStatus", JSON.stringify(false));
     }
 
-    // Register for push notifications after successful login
     await registerForPushNotifications(data.token, data.user.id);
 
     router.replace({

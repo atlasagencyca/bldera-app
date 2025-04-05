@@ -977,15 +977,15 @@ export default function ClockScreen({ navigation }) {
     setButtonDisabled(true);
     setIsSelectionLocked(true);
 
-    if (!inputText.trim()) {
-      Alert.alert(
-        "Input Required",
-        "Please enter a note describing the work completed before clocking out."
-      );
-      setButtonDisabled(false);
-      setIsSelectionLocked(false);
-      return;
-    }
+    // if (!inputText.trim()) {
+    //   Alert.alert(
+    //     "Input Required",
+    //     "Please enter a note describing the work completed before clocking out."
+    //   );
+    //   setButtonDisabled(false);
+    //   setIsSelectionLocked(false);
+    //   return;
+    // }
 
     await loadDetails();
 
@@ -1541,7 +1541,7 @@ export default function ClockScreen({ navigation }) {
                       style={tw`flex-1 items-center mx-1`}
                     >
                       <View style={tw`relative`}>
-                        <Ionicons name="receipt" size={48} color="#162435" />
+                        <Ionicons name="receipt" size={48} color="#fd9a00" />
                         {receiptCount > 0 && (
                           <View
                             style={tw`absolute -top-1 -right-2 bg-red-500 w-5 h-5 rounded-full justify-center items-center`}
@@ -1564,7 +1564,7 @@ export default function ClockScreen({ navigation }) {
                       style={tw`flex-1 items-center mx-1`}
                     >
                       <View style={tw`relative`}>
-                        <FontAwesome name="image" size={48} color="#162435" />
+                        <FontAwesome name="image" size={48} color="#fd9a00" />
                         {imageCount > 0 && (
                           <View
                             style={tw`absolute -top-1 -right-2 bg-red-500 w-5 h-5 rounded-full justify-center items-center`}
@@ -1791,10 +1791,10 @@ export default function ClockScreen({ navigation }) {
                         <FontAwesome
                           name="plus-circle"
                           size={24}
-                          color="#162435"
+                          color="#fd9a00"
                         />
                         <Text
-                          style={tw`text-[16px] text-[#162435] ml-2 font-semibold`}
+                          style={tw`text-[16px] text-[#fd9a00] ml-2 font-semibold`}
                         >
                           Add Notes
                         </Text>
@@ -1875,22 +1875,14 @@ export default function ClockScreen({ navigation }) {
               <TouchableOpacity
                 onPress={() => {
                   if (clockInStatus) {
-                    if (!inputText.trim()) {
-                      Alert.alert(
-                        "Add Notes",
-                        "You must add notes before clocking out.",
-                        [{ text: "OK" }]
-                      );
-                    } else {
-                      finalizeClockOut();
-                    }
+                    finalizeClockOut();
                   } else {
                     handleClockIn();
                   }
                 }}
                 style={[
                   tw`self-center w-52 py-3 rounded-xl shadow-md`,
-                  clockInStatus ? tw`bg-red-700` : tw`bg-green-700`,
+                  clockInStatus ? tw`bg-red-700` : tw`bg-orange-500`,
                   buttonDisabled && tw`opacity-50`,
                 ]}
                 activeOpacity={buttonDisabled ? 1 : 0.8}

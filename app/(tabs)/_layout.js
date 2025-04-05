@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Text } from "react-native";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
@@ -200,6 +200,16 @@ export default function TabLayout() {
           title: "Worksheets",
           tabBarIcon: ({ color }) => (
             <Feather name="file-text" size={24} color={color} />
+          ),
+          tabBarButton: isSiteWorker ? () => null : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="time-and-material"
+        options={{
+          title: "T & M",
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons name="timetable" size={24} color={color} />
           ),
           tabBarButton: isSiteWorker ? () => null : undefined,
         }}

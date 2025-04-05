@@ -23,6 +23,7 @@ export default function HealthSafetyDocsScreen() {
   const [userRole, setUserRole] = useState(""); // Target user's role
   const [currentUserRole, setCurrentUserRole] = useState(""); // Current user's role
   const [currentUserId, setCurrentUserId] = useState("");
+  const [isPaid, setIsPaid] = useState(false); // New state for paid status
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -48,7 +49,7 @@ export default function HealthSafetyDocsScreen() {
 
         setCurrentUserId(storedUserId);
 
-        // Fetch current user's role
+        // Fetch current user's role and isPaid status
         const currentUserResponse = await fetch(
           `https://erp-production-72da01c8e651.herokuapp.com/api/mobile/users/me/${await SecureStore.getItemAsync(
             "userEmail"
@@ -69,6 +70,7 @@ export default function HealthSafetyDocsScreen() {
 
         const currentUserData = await currentUserResponse.json();
         setCurrentUserRole(currentUserData.user.role || "");
+        setIsPaid(currentUserData.user.isPaid || false); // Assuming isPaid is in the response
 
         // Fetch target user's data
         const targetUserResponse = await fetch(
@@ -119,15 +121,23 @@ export default function HealthSafetyDocsScreen() {
   };
 
   const handleAddDocument = () => {
+    if (!isPaid) {
+      Alert.alert("Restricted", "Only paid users can add documents.");
+      return;
+    }
     setNewDoc({ name: "", expiryDate: "", file: null, docId: null });
     setIsEditing(false);
     setModalVisible(true);
   };
 
   const handleEditDocument = (doc) => {
+    if (!isPaid) {
+      Alert.alert("Restricted", "Only paid users can edit documents.");
+      return;
+    }
     setNewDoc({
       name: doc.name,
-      expiryDate: doc.expiryDate.split("T")[0], // Pre-fill with existing date
+      expiryDate: doc.expiryDate.split("T")[0],
       file: null,
       docId: doc._id,
     });
@@ -160,7 +170,7 @@ export default function HealthSafetyDocsScreen() {
   };
 
   const handleDateConfirm = (date) => {
-    const formattedDate = date.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+    const formattedDate = date.toISOString().split("T")[0];
     setNewDoc((prev) => ({ ...prev, expiryDate: formattedDate }));
     setDatePickerVisible(false);
   };
@@ -180,7 +190,7 @@ export default function HealthSafetyDocsScreen() {
       if (newDoc.file) {
         formData.append("document", {
           uri: newDoc.file.uri,
-          type: newDoc.file.mimeType || "image/jpeg", // Default to JPEG for images
+          type: newDoc.file.mimeType || "image/jpeg",
           name: newDoc.file.fileName || `photo-${Date.now()}.jpg`,
         });
       }
@@ -232,6 +242,7 @@ export default function HealthSafetyDocsScreen() {
   }
 
   const canAddOrEditDocuments =
+    isPaid && // Add isPaid check
     (currentUserRole === "foreman" || currentUserRole === "admin") &&
     (currentUserId !== userId || currentUserRole !== "site_worker");
 
@@ -315,7 +326,7 @@ export default function HealthSafetyDocsScreen() {
         </View>
       </ScrollView>
 
-      {/* Add/Edit Document Modal (Only for Foreman/Admin) */}
+      {/* Add/Edit Document Modal (Only for Paid Foreman/Admin) */}
       {canAddOrEditDocuments && (
         <Modal
           animationType="slide"
@@ -330,7 +341,7 @@ export default function HealthSafetyDocsScreen() {
               style={tw`bg-white rounded-xl p-6 w-11/12 max-w-md shadow-md`}
             >
               <Text style={tw`text-xl font-semibold text-gray-900 mb-4`}>
-                {isEditing ? "Edit Document" : "Add Health & Saftey Document"}
+                {isEditing ? "Edit Document" : "Add Health & Safety Document"}
               </Text>
               <TextInput
                 style={tw`border border-gray-300 rounded-md p-3 mb-4 text-gray-900`}
@@ -354,7 +365,7 @@ export default function HealthSafetyDocsScreen() {
                 mode="date"
                 onConfirm={handleDateConfirm}
                 onCancel={() => setDatePickerVisible(false)}
-                minimumDate={new Date()} // Prevent past dates
+                minimumDate={new Date()}
               />
               <TouchableOpacity
                 style={tw`bg-gray-200 py-3 px-4 rounded-lg mb-4 flex-row items-center justify-between`}
@@ -365,7 +376,7 @@ export default function HealthSafetyDocsScreen() {
                 </Text>
                 <Feather name="camera" size={20} color="#374151" />
               </TouchableOpacity>
-              <View style={tw`flex-row justify-end `}>
+              <View style={tw`flex-row justify-end`}>
                 <TouchableOpacity
                   style={tw`bg-gray-600 py-2 px-8 rounded-lg mr-2`}
                   onPress={() => setModalVisible(false)}
