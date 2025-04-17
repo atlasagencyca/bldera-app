@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLDERA",
     "slug": "BLDERA",
-    "version": "1.0.24",
+    "version": "1.1.0",
     "entryPoint": "src/App.js",
     "scheme": "bldera",
     "orientation": "portrait",

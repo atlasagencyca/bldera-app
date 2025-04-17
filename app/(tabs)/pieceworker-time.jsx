@@ -32,7 +32,7 @@ const getAvailabilityColor = (estimated, installed, pending) => {
 export default function PieceworkScreen() {
   const router = useRouter();
   const [mode, setMode] = useState(null); // "create" or "history"
-  const [historyTab, setHistoryTab] = useState("pending"); // "pending" or "approved"
+  const [historyTab, setHistoryTab] = useState("pending"); // "pending", "approved", or "rejected"
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const { fromTab } = useLocalSearchParams();
@@ -118,14 +118,14 @@ export default function PieceworkScreen() {
   useEffect(() => {
     const loadUserRole = async () => {
       try {
-        console.log("Loading user role from SecureStore..."); // Debug log
+        console.log("Loading user role from SecureStore...");
         const storedRole = await SecureStore.getItemAsync("userRole");
-        console.log("Stored Role:", storedRole); // Debug log
+        console.log("Stored Role:", storedRole);
         if (storedRole) {
           setUserRole(storedRole);
         } else {
           console.warn("No user role found in SecureStore");
-          setUserRole("unassigned"); // Fallback if not found
+          setUserRole("unassigned");
         }
       } catch (error) {
         console.error("Error loading user role from SecureStore:", error);
@@ -190,6 +190,7 @@ export default function PieceworkScreen() {
     const statusMap = {
       pending: "pending",
       approved: "approved",
+      rejected: "rejected",
     };
     setFilteredLogs(
       allLogs.filter((log) => log.status === statusMap[historyTab])
@@ -207,7 +208,6 @@ export default function PieceworkScreen() {
 
   const handleSelectWorkOrder = async (workOrder) => {
     setSelectedWorkOrder(workOrder);
-
     setLineItems(workOrder.lineItems || []);
     try {
       const token = await SecureStore.getItemAsync("authToken");
@@ -218,7 +218,6 @@ export default function PieceworkScreen() {
 
       if (response.ok) {
         const data = await response.json();
-
         setEmployees(data);
       }
     } catch (error) {
@@ -272,7 +271,7 @@ export default function PieceworkScreen() {
         projectId: selectedProject._id.$oid || selectedProject._id,
         workOrderId: selectedWorkOrder._id.$oid || selectedWorkOrder._id,
         employeeId: selectedEmployee._id.$oid || selectedEmployee._id,
-        woNumber: selectedWorkOrder.woNumber || selectedEmployee._id,
+        woNumber: selectedWorkOrder.woNumber || selectedWorkOrder._id,
         lineItems: lineItems.map((item) => {
           const itemId = item._id.$oid || item._id;
           return {
@@ -799,6 +798,20 @@ export default function PieceworkScreen() {
                   Approved
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={tw`flex-1 rounded-full py-2 ${
+                  historyTab === "rejected" ? "bg-gray-100" : ""
+                }`}
+                onPress={() => setHistoryTab("rejected")}
+              >
+                <Text
+                  style={tw`text-[16px] text-gray-900 font-semibold text-center ${
+                    historyTab === "rejected" ? "text-indigo-600" : ""
+                  }`}
+                >
+                  Rejected
+                </Text>
+              </TouchableOpacity>
             </View>
             {filteredLogs.length > 0 ? (
               filteredLogs.map((log) => (
@@ -842,6 +855,8 @@ export default function PieceworkScreen() {
                       style={tw`text-[14px] ${
                         log.status === "approved"
                           ? "text-green-600"
+                          : log.status === "rejected"
+                          ? "text-red-600"
                           : "text-yellow-600"
                       }`}
                     >
