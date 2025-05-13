@@ -8,7 +8,7 @@ import {
   Alert,
   Switch,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome } from "@expo/vector-icons";
 import tw from "twrnc";
@@ -17,7 +17,8 @@ import * as SecureStore from "expo-secure-store";
 
 export default function MaterialOrderScreen() {
   const router = useRouter();
-  const [stage, setStage] = useState("selectProject");
+  const { projectId } = useLocalSearchParams(); // Get projectId from navigation params
+  const [stage, setStage] = useState("modeSelection"); // Start at modeSelection since project is pre-selected
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -68,6 +69,16 @@ export default function MaterialOrderScreen() {
         if (!response.ok) throw new Error("Failed to fetch projects");
 
         setProjects(data || []);
+        // If projectId is provided, find and set the selected project
+        if (projectId) {
+          const project = data.find((p) => p._id === projectId);
+          if (project) {
+            setSelectedProject(project);
+          } else {
+            Alert.alert("Error", "Selected project not found.");
+            router.back();
+          }
+        }
       } catch (error) {
         console.error("Error fetching projects:", error);
         Alert.alert("Error", "Failed to load projects.");
@@ -76,7 +87,7 @@ export default function MaterialOrderScreen() {
       }
     };
     fetchProjects();
-  }, []);
+  }, [projectId]);
 
   const getAvailabilityColor = (required, ordered, pending) => {
     const total = required || 0;
@@ -107,7 +118,6 @@ export default function MaterialOrderScreen() {
         lineItems: po.lineItems || [],
       }))
     );
-    setStage("modeSelection");
   }, [selectedProject]);
 
   useEffect(() => {
@@ -182,10 +192,6 @@ export default function MaterialOrderScreen() {
     }
   }, [selectedProject, selectedPO, selectedBidArea]);
 
-  const handleSelectProject = (project) => {
-    setSelectedProject(project);
-  };
-
   const handleSelectPO = (poId) => {
     setSelectedPO(poId);
     setSelectedItems({});
@@ -258,6 +264,7 @@ export default function MaterialOrderScreen() {
         return {
           projectItem: projectItem?._id,
           quantity: parseInt(qty),
+          size: item.size || "N/A", // Include size, fallback to "N/A" if not available
         };
       });
 
@@ -331,58 +338,12 @@ export default function MaterialOrderScreen() {
   return (
     <View style={tw`flex-1 bg-gray-50 p-6`}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {stage === "selectProject" && (
-          <>
-            <Text
-              style={tw`text-[24px] font-bold text-gray-900 mb-6 text-center`}
-            >
-              Select Project
-            </Text>
-            {projects.length > 0 ? (
-              projects.map((project) => (
-                <TouchableOpacity
-                  key={project._id}
-                  style={tw`bg-white rounded-xl p-4 mb-4 shadow-md flex-row items-center`}
-                  onPress={() => handleSelectProject(project)}
-                >
-                  <View
-                    style={tw`w-12 h-12 bg-gray-200 rounded-full justify-center items-center mr-4`}
-                  >
-                    <FontAwesome name="building" size={24} color="gray" />
-                  </View>
-                  <Text style={tw`text-[16px] text-gray-900 flex-1`}>
-                    {project.projectName}
-                  </Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text style={tw`text-[16px] text-gray-500 text-center mb-6`}>
-                No projects available
-              </Text>
-            )}
-            <TouchableOpacity
-              style={tw`flex-row items-center bg-white rounded-full p-4 border border-gray-200 shadow-md`}
-              onPress={() => router.back()}
-            >
-              <LinearGradient
-                colors={["#6b7280", "#9ca3af"]}
-                style={tw`w-10 h-10 rounded-full justify-center items-center mr-3`}
-              >
-                <FontAwesome name="arrow-left" size={20} color="white" />
-              </LinearGradient>
-              <Text style={tw`text-[18px] text-gray-900 font-semibold flex-1`}>
-                Exit
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-
         {stage === "modeSelection" && (
           <>
             <Text
               style={tw`text-[24px] font-bold text-gray-900 mb-6 text-center`}
             >
-              Material Order Management - {selectedProject.projectName}
+              Material Order Management - {selectedProject?.projectName}
             </Text>
             <TouchableOpacity
               style={tw`flex-row items-center bg-white rounded-full p-4 mb-4 border border-gray-200 shadow-md`}
@@ -419,10 +380,7 @@ export default function MaterialOrderScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={tw`flex-row items-center bg-white rounded-full p-4 border border-gray-200 shadow-md`}
-              onPress={() => {
-                setSelectedProject(null);
-                setStage("selectProject");
-              }}
+              onPress={() => router.back()}
             >
               <LinearGradient
                 colors={["#6b7280", "#9ca3af"]}
@@ -431,7 +389,7 @@ export default function MaterialOrderScreen() {
                 <FontAwesome name="arrow-left" size={20} color="white" />
               </LinearGradient>
               <Text style={tw`text-[18px] text-gray-900 font-semibold flex-1`}>
-                Back to Project Selection
+                Back to Projects
               </Text>
             </TouchableOpacity>
           </>

@@ -1,18 +1,25 @@
 import { Tabs } from "expo-router";
-import { TouchableOpacity, View, Text } from "react-native";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import {
+  TouchableOpacity,
+  View,
+  Text,
+  Animated,
+  StyleSheet,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import * as SecureStore from "expo-secure-store";
-import tw from "twrnc";
-import { SafeAreaView } from "react-native-safe-area-context";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import tw from "twrnc";
 
-export default function TabLayout() {
+export default function Layout() {
   const router = useRouter();
   const [userName, setUserName] = useState("User");
   const [unreadCount, setUnreadCount] = useState(0);
   const [userRole, setUserRole] = useState(null);
+  const [activeTab, setActiveTab] = useState("clock-in-out");
+  const animatedValue = useRef(new Animated.Value(0)).current;
 
   const fetchUnreadNotifications = async () => {
     try {
@@ -90,35 +97,14 @@ export default function TabLayout() {
 
   const isSiteWorker = userRole === "site_worker";
 
-  // Custom tab bar for site workers to center the single tab
-  const renderTabBar = (props) => {
-    if (!isSiteWorker) return null; // Use default tab bar for non-site workers
-
-    const { state, descriptors, navigation } = props;
-    const route = state.routes[0]; // Only "clock-in-out" is visible for site workers
-    const { options } = descriptors[route.key];
-
-    return (
-      <SafeAreaView edges={["bottom"]}>
-        <View style={tw`flex-row justify-center items-center pb-0 mb--12`}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate(route.name)}
-            style={tw`flex-col items-center justify-center p-2`}
-          >
-            {options.tabBarIcon({
-              color: state.index === 0 ? "#1E90FF" : "gray",
-            })}
-            <Text
-              style={tw`${
-                state.index === 0 ? "text-[#1E90FF]" : "text-gray-500"
-              } text-xs`}
-            >
-              {options.title}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
+  // Animation for active tab
+  const handleTabPress = (tabName) => {
+    setActiveTab(tabName);
+    Animated.timing(animatedValue, {
+      toValue: tabName === "clock-in-out" ? 0 : 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
   };
 
   return (
@@ -152,80 +138,132 @@ export default function TabLayout() {
             </TouchableOpacity>
           </View>
         ),
-        tabBarActiveTintColor: "#1E90FF",
-        tabBarInactiveTintColor: "gray",
         tabBarStyle: {
-          backgroundColor: "#f8f9fa",
+          backgroundColor: "#4B5563", // Dark gray background
           borderTopWidth: 0,
-          elevation: 0,
+          elevation: 8,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          height: 100,
+
           paddingTop: 0,
-          bottom: 0,
-          paddingBottom: 0,
-          marginBottom: -40,
+          marginBottom: -50,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
         },
       }}
-      tabBar={isSiteWorker ? renderTabBar : undefined} // Use custom tab bar only for site workers
     >
-      <Tabs.Screen
-        name="rfi"
-        options={{
-          title: "RFI",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome6 name="file-circle-question" size={24} color={color} />
-          ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
-        }}
-      />
-      <Tabs.Screen
-        name="material-order"
-        options={{
-          title: "Materials",
-          tabBarIcon: ({ color }) => (
-            <Feather name="package" size={24} color={color} />
-          ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
-        }}
-      />
       <Tabs.Screen
         name="clock-in-out"
         options={{
           title: "Clock In/Out",
-          tabBarIcon: ({ color }) => (
-            <Feather name="clock" size={24} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <Feather
+              name="clock"
+              size={24}
+              color={focused ? "#fd9a00" : "#f8f9fa"}
+            />
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text
+              style={{
+                color: focused ? "#fd9a00" : "#f8f9fa",
+                fontSize: 12,
+                fontWeight: focused ? "bold" : "normal",
+              }}
+            >
+              Clock In/Out
+            </Text>
+          ),
+          tabBarButton: (props) => (
+            <TouchableOpacity
+              {...props}
+              style={styles.tabButton}
+              onPress={() => {
+                props.onPress();
+                handleTabPress("clock-in-out");
+              }}
+            >
+              <View style={styles.tabContent}>
+                {props.children}
+                {activeTab === "clock-in-out" && (
+                  <View style={styles.activeIndicator} />
+                )}
+              </View>
+            </TouchableOpacity>
           ),
         }}
       />
       <Tabs.Screen
-        name="pieceworker-time"
+        name="projects"
         options={{
-          title: "Worksheets",
-          tabBarIcon: ({ color }) => (
-            <Feather name="file-text" size={24} color={color} />
+          title: "Projects",
+          tabBarIcon: ({ focused }) => (
+            <FontAwesome6
+              name="building"
+              size={24}
+              color={focused ? "#fd9a00" : "#f8f9fa"}
+            />
           ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
-        }}
-      />
-      <Tabs.Screen
-        name="progressLogScreen"
-        options={{
-          title: "Progress",
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="journal-sharp" size={24} color={color} />
+          tabBarLabel: ({ focused }) => (
+            <Text
+              style={{
+                color: focused ? "#fd9a00" : "#f8f9fa",
+                fontSize: 12,
+                fontWeight: focused ? "bold" : "normal",
+              }}
+            >
+              Projects
+            </Text>
           ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
-        }}
-      />
-
-      <Tabs.Screen
-        name="time-and-material"
-        options={{
-          title: "T&M",
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="timetable" size={24} color={color} />
-          ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
+          tabBarButton: isSiteWorker
+            ? () => null
+            : (props) => (
+                <TouchableOpacity
+                  {...props}
+                  style={styles.tabButton}
+                  onPress={() => {
+                    props.onPress();
+                    handleTabPress("projects");
+                  }}
+                >
+                  <View style={styles.tabContent}>
+                    {props.children}
+                    {activeTab === "projects" && (
+                      <View style={styles.activeIndicator} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 5,
+  },
+  tabContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  activeIndicator: {
+    position: "absolute",
+    bottom: -5,
+    width: 40,
+    height: 3,
+    backgroundColor: "#fd9a00",
+    borderRadius: 2,
+  },
+});

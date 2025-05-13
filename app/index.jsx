@@ -472,7 +472,7 @@ export default function LoginScreen() {
       end={{ x: 1, y: 1 }}
       style={tw`flex-1`}
     >
-      <SafeAreaView style={tw`flex-1 justify-center items-center px-6`}>
+      <SafeAreaView style={tw`flex-1 justify-center items-center px-6 `}>
         <Image
           source={require("../assets/images/bldera.png")}
           style={tw`w-40 h-40 mb-10`}
