@@ -34,7 +34,7 @@ export default function TimeAndMaterialScreen() {
   const [scopeOfWork, setScopeOfWork] = useState("");
   const [images, setImages] = useState([]);
   const [signature, setSignature] = useState(null);
-  const [approvedBy, setApprovedBy] = useState(""); // Maps to signedBy
+  const [approvedBy, setApprovedBy] = useState("");
   const [loading, setLoading] = useState(false);
   const [availableLabourItems, setAvailableLabourItems] = useState([]);
   const [availableMaterialItems, setAvailableMaterialItems] = useState([]);
@@ -42,6 +42,9 @@ export default function TimeAndMaterialScreen() {
   const [selectedMaterialItem, setSelectedMaterialItem] = useState("");
   const [labourQty, setLabourQty] = useState("");
   const [materialQty, setMaterialQty] = useState("");
+  const [labourBidArea, setLabourBidArea] = useState("");
+  const [materialBidArea, setMaterialBidArea] = useState("");
+  const [availableBidAreas, setAvailableBidAreas] = useState([]);
   const [showLabourInput, setShowLabourInput] = useState(false);
   const [showMaterialInput, setShowMaterialInput] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
@@ -116,31 +119,66 @@ export default function TimeAndMaterialScreen() {
   };
 
   const fetchAvailableItems = () => {
-    setAvailableLabourItems(
-      selectedProject.contractLabourItems.map((item) => ({
-        key: item._id,
-        value: `${item.labourItem?.title || "Unnamed"} (${item.uom})`,
-        unitRate: item.unitRate,
-        uom: item.uom,
-      }))
-    );
+    const bidAreaSet = new Set();
 
+    // Labour items from contractLabourItems
+    const labourOptions = selectedProject.contractLabourItems.map((item) => ({
+      key: item._id,
+      value: `${item.labourItem?.title || "Unnamed"} (${item.uom})`,
+      unitRate: item.unitRate,
+      unitCost: item.unitCost || item.unitRate,
+      uom: item.uom,
+      costCode: item.costCode?._id || item.costCode || null,
+      vendor: item.vendor?._id || item.vendor || null,
+    }));
+
+    // Material and additional labour items from budgets
     const materialOptions = [];
     selectedProject.budgets.forEach((budget) => {
-      budget.lineItems
-        .filter((item) => item.category === "M")
-        .forEach((item) => {
+      budget.lineItems.forEach((item) => {
+        if (item.bidArea && item.bidArea !== "(unassigned)") {
+          bidAreaSet.add(item.bidArea);
+        }
+        if (item.category === "M") {
           materialOptions.push({
             key: item._id,
             value: `${item.itemDescription || "Unnamed"} (${
               item.container || "N/A"
-            })`,
+            } - ${item.size || "N/A"})`,
             cost: item.cost,
+            price: item.price || item.cost,
             uom: item.container || "N/A",
+            itemDescription: item.itemDescription || "Unnamed",
+            itemCode: item.itemCode || "N/A",
+            size: item.size || "N/A",
+            container: item.container || "N/A",
+            bidArea: item.bidArea || "",
+            costCode: item.costCode?._id || item.costCode || null,
+            vendor: item.vendor?._id || item.vendor || null,
           });
-        });
+        } else if (item.category === "L") {
+          labourOptions.push({
+            key: item._id,
+            value: `${item.costCodeDescription || "Unnamed"} (${item.uom})`,
+            unitRate: item.unitRate || item.price,
+            unitCost: item.unitCost || item.unitRate || item.price,
+            uom: item.uom,
+            bidArea: item.bidArea || "",
+            costCode: item.costCode?._id || item.costCode || null,
+            vendor: item.vendor?._id || item.vendor || null,
+          });
+        }
+      });
     });
+
+    setAvailableLabourItems(labourOptions);
     setAvailableMaterialItems(materialOptions);
+    setAvailableBidAreas(
+      Array.from(bidAreaSet).map((area) => ({
+        key: area,
+        value: area,
+      }))
+    );
   };
 
   const handleCreateToggle = () => {
@@ -157,6 +195,8 @@ export default function TimeAndMaterialScreen() {
     setSelectedMaterialItem("");
     setLabourQty("");
     setMaterialQty("");
+    setLabourBidArea("");
+    setMaterialBidArea("");
     setShowLabourInput(false);
     setShowMaterialInput(false);
     setIsSigning(false);
@@ -166,59 +206,123 @@ export default function TimeAndMaterialScreen() {
     setIsEditing(true);
     setIsCreating(true);
     setEditingId(entry._id);
-    setLabourItems(
-      entry.labourItems.map((item) => ({
-        contractLabourItem:
-          item.contractLabourItem._id || item.contractLabourItem,
-        quantityUsed: item.quantityUsed,
-        totalCost: item.totalCost,
-      }))
-    );
-    setMaterialItems(
-      entry.materialItems.map((item) => ({
-        budgetLineItem: item.budgetLineItem._id || item.budgetLineItem,
-        quantityUsed: item.quantityUsed,
-        totalCost: item.totalCost,
-      }))
-    );
-    setScopeOfWork(entry.scopeOfWork || "");
-    setImages(entry.images || []);
-    setSignature(entry.signature || null); // Load signature URL
-    setApprovedBy(entry.signedBy || "");
-    setShowLabourInput(false);
-    setShowMaterialInput(false);
-    setIsSigning(false);
+    try {
+      setLabourItems(
+        entry.labourItems.map((item) => ({
+          contractLabourItem:
+            item.contractLabourItem?.$oid ||
+            item.contractLabourItem?._id ||
+            item.contractLabourItem ||
+            "",
+          quantityUsed: item.quantityUsed || 0,
+          totalCost: item.totalCost || 0,
+          totalPrice: item.totalPrice || item.totalCost || 0,
+          bidArea: item.bidArea || "",
+          costCode:
+            item.costCode?.$oid || item.costCode?._id || item.costCode || "",
+          vendor: item.vendor?.$oid || item.vendor?._id || item.vendor || null,
+        }))
+      );
+      setMaterialItems(
+        entry.materialItems.map((item) => ({
+          budgetLineItem:
+            item.budgetLineItem?.$oid ||
+            item.budgetLineItem?._id ||
+            item.budgetLineItem ||
+            "",
+          quantityUsed: item.quantityUsed || 0,
+          totalCost: item.totalCost || 0,
+          totalPrice: item.totalPrice || item.totalCost || 0,
+          cost: item.cost || 0,
+          price: item.price || item.cost || 0,
+          itemDescription: item.itemDescription || "Unnamed",
+          itemCode: item.itemCode || "N/A",
+          size: item.size || "N/A",
+          container: item.container || "N/A",
+          bidArea: item.bidArea || "",
+          costCode:
+            item.costCode?.$oid || item.costCode?._id || item.costCode || "",
+          vendor: item.vendor?.$oid || item.vendor?._id || item.vendor || null,
+        }))
+      );
+      setScopeOfWork(entry.scopeOfWork || "");
+      setImages(entry.images || []);
+      setSignature(entry.signature || null);
+      setApprovedBy(entry.signedBy || "");
+      setShowLabourInput(false);
+      setShowMaterialInput(false);
+      setIsSigning(false);
+    } catch (error) {
+      Alert.alert("Error", "Failed to load entry for editing.");
+      console.error("Error in handleEdit:", error);
+    }
   };
 
   const addLabourItem = () => {
-    if (!selectedLabourItem || !labourQty) return;
+    if (!selectedLabourItem || !labourQty || !labourBidArea) {
+      Alert.alert(
+        "Error",
+        "Please select a labour item, quantity, and bid area."
+      );
+      return;
+    }
     const labourItem = availableLabourItems.find(
       (item) => item.key === selectedLabourItem
     );
+    if (!labourItem.costCode) {
+      Alert.alert("Error", "Selected labour item is missing a cost code.");
+      return;
+    }
     const newLabourItem = {
       contractLabourItem: labourItem.key,
       quantityUsed: parseFloat(labourQty) || 0,
-      totalCost: (parseFloat(labourQty) || 0) * labourItem.unitRate,
+      totalCost: (parseFloat(labourQty) || 0) * labourItem.unitCost,
+      totalPrice: (parseFloat(labourQty) || 0) * labourItem.unitRate,
+      bidArea: labourBidArea,
+      costCode: labourItem.costCode,
+      vendor: labourItem.vendor,
     };
     setLabourItems((prev) => [...prev, newLabourItem]);
     setSelectedLabourItem("");
     setLabourQty("");
+    setLabourBidArea("");
     setShowLabourInput(false);
   };
 
   const addMaterialItem = () => {
-    if (!selectedMaterialItem || !materialQty) return;
+    if (!selectedMaterialItem || !materialQty || !materialBidArea) {
+      Alert.alert(
+        "Error",
+        "Please select a material item, quantity, and bid area."
+      );
+      return;
+    }
     const materialItem = availableMaterialItems.find(
       (item) => item.key === selectedMaterialItem
     );
+    if (!materialItem.costCode) {
+      Alert.alert("Error", "Selected material item is missing a cost code.");
+      return;
+    }
     const newMaterialItem = {
       budgetLineItem: materialItem.key,
       quantityUsed: parseFloat(materialQty) || 0,
       totalCost: (parseFloat(materialQty) || 0) * materialItem.cost,
+      totalPrice: (parseFloat(materialQty) || 0) * materialItem.price,
+      cost: materialItem.cost,
+      price: materialItem.price,
+      itemDescription: materialItem.itemDescription,
+      itemCode: materialItem.itemCode,
+      size: materialItem.size,
+      container: materialItem.container,
+      bidArea: materialBidArea,
+      costCode: materialItem.costCode,
+      vendor: materialItem.vendor, // Set default vendor from selected material item
     };
     setMaterialItems((prev) => [...prev, newMaterialItem]);
     setSelectedMaterialItem("");
     setMaterialQty("");
+    setMaterialBidArea("");
     setShowMaterialInput(false);
   };
 
@@ -324,7 +428,7 @@ export default function TimeAndMaterialScreen() {
         `Entry ${isEditing ? "updated" : "created"} successfully`
       );
     } catch (error) {
-      Alert.alert("Error", "Failed to save entry");
+      Alert.alert("Error", `Failed to save entry: ${error.message}`);
       console.error(error);
     } finally {
       setLoading(false);
@@ -454,9 +558,27 @@ export default function TimeAndMaterialScreen() {
                     <Text style={tw`text-[16px] text-gray-700`}>
                       Labour: {entry.labourItems.length} items
                     </Text>
+                    {entry.labourItems.map((item, index) => (
+                      <Text
+                        key={`labour-${index}`}
+                        style={tw`text-[14px] text-gray-600 ml-4`}
+                      >
+                        - {item.quantityUsed} {item.uom || "N/A"} (Bid Area:{" "}
+                        {item.bidArea || "N/A"})
+                      </Text>
+                    ))}
                     <Text style={tw`text-[16px] text-gray-700`}>
                       Materials: {entry.materialItems.length} items
                     </Text>
+                    {entry.materialItems.map((item, index) => (
+                      <Text
+                        key={`material-${index}`}
+                        style={tw`text-[14px] text-gray-600 ml-4`}
+                      >
+                        - {item.quantityUsed} {item.container || "N/A"} (Bid
+                        Area: {item.bidArea || "N/A"})
+                      </Text>
+                    ))}
                     <Text style={tw`text-[16px] text-gray-700 mt-1`}>
                       Scope: {entry.scopeOfWork || "N/A"}
                     </Text>
@@ -533,8 +655,12 @@ export default function TimeAndMaterialScreen() {
                           {labourDetail
                             ? `${labourDetail.value.split(" (")[0]}: ${
                                 item.quantityUsed
-                              } ${labourDetail.uom}`
-                            : `Labour Item: ${item.quantityUsed} HRs`}
+                              } ${labourDetail.uom || "N/A"} (Bid Area: ${
+                                item.bidArea || "N/A"
+                              })`
+                            : `Labour Item: ${
+                                item.quantityUsed
+                              } HRs (Bid Area: ${item.bidArea || "N/A"})`}
                         </Text>
                       );
                     })}
@@ -548,10 +674,14 @@ export default function TimeAndMaterialScreen() {
                           style={tw`text-[16px] text-gray-700 mb-2`}
                         >
                           {materialDetail
-                            ? `${materialDetail.value.split(" (")[0]}: ${
+                            ? `${materialDetail.itemDescription}: ${
                                 item.quantityUsed
-                              } ${materialDetail.uom}`
-                            : `Material Item: ${item.quantityUsed}`}
+                              } ${materialDetail.uom || "N/A"} (Bid Area: ${
+                                item.bidArea || "N/A"
+                              })`
+                            : `Material Item: ${item.quantityUsed} (Bid Area: ${
+                                item.bidArea || "N/A"
+                              })`}
                         </Text>
                       );
                     })}
@@ -559,7 +689,7 @@ export default function TimeAndMaterialScreen() {
                 )}
               </View>
 
-              {/* Add Buttons */}
+              {/* Add Labour Items */}
               <TouchableOpacity
                 style={tw`bg-indigo-600 rounded-lg p-4 mb-4 shadow-md`}
                 onPress={() => setShowLabourInput(!showLabourInput)}
@@ -596,8 +726,19 @@ export default function TimeAndMaterialScreen() {
                     placeholder="Quantity (HRs)"
                     placeholderTextColor="#999"
                   />
+                  <SelectList
+                    setSelected={setLabourBidArea}
+                    data={availableBidAreas}
+                    placeholder="Select Bid Area"
+                    boxStyles={dropdownStyles.boxStyles}
+                    inputStyles={dropdownStyles.inputStyles}
+                    dropdownStyles={dropdownStyles.dropdownStyles}
+                    dropdownItemStyles={(index) =>
+                      dropdownStyles.dropdownItemStyles(index)
+                    }
+                  />
                   <TouchableOpacity
-                    style={tw`bg-green-600 p-4 rounded-lg`}
+                    style={tw`bg-green-600 p-4 rounded-lg mt-3`}
                     onPress={addLabourItem}
                   >
                     <Text
@@ -609,6 +750,7 @@ export default function TimeAndMaterialScreen() {
                 </View>
               )}
 
+              {/* Add Material Items */}
               <TouchableOpacity
                 style={tw`bg-indigo-600 rounded-lg p-4 mb-4 shadow-md`}
                 onPress={() => setShowMaterialInput(!showMaterialInput)}
@@ -645,8 +787,19 @@ export default function TimeAndMaterialScreen() {
                     placeholder="Quantity"
                     placeholderTextColor="#999"
                   />
+                  <SelectList
+                    setSelected={setMaterialBidArea}
+                    data={availableBidAreas}
+                    placeholder="Select Bid Area"
+                    boxStyles={dropdownStyles.boxStyles}
+                    inputStyles={dropdownStyles.inputStyles}
+                    dropdownStyles={dropdownStyles.dropdownStyles}
+                    dropdownItemStyles={(index) =>
+                      dropdownStyles.dropdownItemStyles(index)
+                    }
+                  />
                   <TouchableOpacity
-                    style={tw`bg-green-600 p-4 rounded-lg`}
+                    style={tw`bg-green-600 p-4 rounded-lg mt-3`}
                     onPress={addMaterialItem}
                   >
                     <Text

@@ -16,7 +16,9 @@
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/685d4a7e-32ee-4faa-a9b1-6aa1dac586f1"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "bundleIdentifier": "com.bldera",
       "config": {
@@ -31,8 +33,14 @@
         "NSCameraUsageDescription": "This app uses the camera to take photos.",
         "NSPhotoLibraryUsageDescription": "BLDERA app requires access to your photos to upload bills.",
         "NSPhotoLibraryAddUsageDescription": "BLDERA app needs permission to save photos to your library.",
-        "UIBackgroundModes": ["location", "processing", "fetch"],
-        "BGTaskSchedulerPermittedIdentifiers": ["com.transistorsoft.customtask"]
+        "UIBackgroundModes": [
+          "location",
+          "processing",
+          "fetch"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.transistorsoft.customtask"
+        ]
       }
     },
     "android": {
@@ -59,7 +67,9 @@
           "cameraPermission": "Allow BLDERA to use your camera to take and upload photos directly to your timesheet."
         }
       ],
-      ["expo-location"],
+      [
+        "expo-location"
+      ],
       [
         "expo-media-library",
         {
@@ -82,7 +92,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      "expo-mail-composer"
     ],
     "extra": {
       "eas": {

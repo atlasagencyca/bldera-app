@@ -33,6 +33,9 @@ export default function MaterialOrderScreen() {
   const [laborersRequired, setLaborersRequired] = useState(false);
   const [laborersQty, setLaborersQty] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedBidArea, setSelectedBidArea] = useState("All Areas");
+  const [isBidAreaDropdownOpen, setIsBidAreaDropdownOpen] = useState(false);
+  const [bidAreas, setBidAreas] = useState(["All Areas"]);
 
   const shippingOptions = ["Delivery", "Pickup"];
 
@@ -46,6 +49,7 @@ export default function MaterialOrderScreen() {
     setDeliveryInstructions("");
     setLaborersRequired(false);
     setLaborersQty("");
+    setSelectedBidArea("All Areas");
   };
 
   useEffect(() => {
@@ -111,11 +115,20 @@ export default function MaterialOrderScreen() {
       setItems([]);
       setVendor(null);
       setVendorId(null);
+      setBidAreas(["All Areas"]);
+      setSelectedBidArea("All Areas");
       return;
     }
 
     const po = purchaseOrders.find((po) => po._id === selectedPO);
     if (!po) return;
+
+    // Extract unique bid areas
+    const uniqueBidAreas = [
+      "All Areas",
+      ...new Set(po.lineItems.map((item) => item.bidArea).filter(Boolean)),
+    ];
+    setBidAreas(uniqueBidAreas);
 
     const filteredItems = po.lineItems
       .map((lineItem) => {
@@ -137,16 +150,37 @@ export default function MaterialOrderScreen() {
           vendorId: lineItem.vendor,
           container: lineItem.container,
           size: lineItem.size,
+          bidArea: lineItem.bidArea,
         };
       })
       .filter((item) => {
+        // Apply bid area filter
+        if (
+          selectedBidArea !== "All Areas" &&
+          item.bidArea !== selectedBidArea
+        ) {
+          return false;
+        }
         const available =
           item.quantityRequired - item.quantityOrdered - item.quantityPending;
         return available > 0;
       });
 
     setItems(filteredItems);
-  }, [selectedProject, selectedPO]);
+
+    // Check for vendor conflicts with selected items
+    if (selectedVendor && filteredItems.length > 0) {
+      const hasVendorMismatch = filteredItems.some(
+        (item) => item.vendor !== selectedVendor
+      );
+      if (hasVendorMismatch) {
+        Alert.alert(
+          "Vendor Mismatch",
+          "Some items in this bid area are from a different vendor. You may need to create separate orders for items from different vendors."
+        );
+      }
+    }
+  }, [selectedProject, selectedPO, selectedBidArea]);
 
   const handleSelectProject = (project) => {
     setSelectedProject(project);
@@ -156,6 +190,7 @@ export default function MaterialOrderScreen() {
     setSelectedPO(poId);
     setSelectedItems({});
     setSelectedVendor(null);
+    setSelectedBidArea("All Areas");
   };
 
   const handleItemQuantityChange = (itemId, value) => {
@@ -216,9 +251,12 @@ export default function MaterialOrderScreen() {
     const itemsToOrder = Object.entries(selectedItems)
       .filter(([, qty]) => parseInt(qty) > 0)
       .map(([itemId, qty]) => {
-        const item = items.find((i) => i._id === itemId);
+        const item = po.lineItems.find((i) => (i._id || i.title) === itemId);
+        const projectItem = selectedProject.projectItems.find(
+          (pi) => pi._id.toString() === item.projectItem?.toString()
+        );
         return {
-          projectItem: item.projectItemId,
+          projectItem: projectItem?._id,
           quantity: parseInt(qty),
         };
       });
@@ -454,6 +492,50 @@ export default function MaterialOrderScreen() {
                   {purchaseOrders.find((po) => po._id === selectedPO)?.poNumber}
                 </Text>
 
+                {/* Bid Area Dropdown */}
+                <View style={tw`bg-white rounded-xl p-4 mb-4 shadow-md`}>
+                  <Text
+                    style={tw`text-[16px] font-semibold text-gray-900 mb-2`}
+                  >
+                    Select Bid Area
+                  </Text>
+                  <TouchableOpacity
+                    style={tw`bg-gray-100 p-3 rounded-lg flex-row justify-between items-center border border-gray-300`}
+                    onPress={() => setIsBidAreaDropdownOpen((prev) => !prev)}
+                  >
+                    <Text style={tw`text-[16px] text-gray-900`}>
+                      {selectedBidArea}
+                    </Text>
+                    <FontAwesome
+                      name={
+                        isBidAreaDropdownOpen ? "chevron-up" : "chevron-down"
+                      }
+                      size={16}
+                      color="#999"
+                    />
+                  </TouchableOpacity>
+                  {isBidAreaDropdownOpen && (
+                    <View
+                      style={tw`bg-white border border-gray-300 rounded-lg mt-1 shadow-md`}
+                    >
+                      {bidAreas.map((area) => (
+                        <TouchableOpacity
+                          key={area}
+                          style={tw`p-3`}
+                          onPress={() => {
+                            setSelectedBidArea(area);
+                            setIsBidAreaDropdownOpen(false);
+                          }}
+                        >
+                          <Text style={tw`text-[16px] text-gray-900`}>
+                            {area}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
                 {items
                   .filter((item) =>
                     selectedVendor ? item.vendor === selectedVendor : true
@@ -520,6 +602,9 @@ export default function MaterialOrderScreen() {
                         </View>
                         <Text style={tw`text-[14px] text-gray-600`}>
                           Vendor: {item.vendor}
+                        </Text>
+                        <Text style={tw`text-[14px] text-gray-600 mt-1`}>
+                          Bid Area: {item.bidArea}
                         </Text>
                         {item.description && (
                           <Text style={tw`text-[14px] text-gray-600 mt-1`}>

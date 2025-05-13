@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import tw from "twrnc";
 import { SafeAreaView } from "react-native-safe-area-context";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -166,18 +167,19 @@ export default function TabLayout() {
       tabBar={isSiteWorker ? renderTabBar : undefined} // Use custom tab bar only for site workers
     >
       <Tabs.Screen
-        name="clock-in-out"
+        name="rfi"
         options={{
-          title: "Clock In/Out",
+          title: "RFI",
           tabBarIcon: ({ color }) => (
-            <Feather name="clock" size={24} color={color} />
+            <FontAwesome6 name="file-circle-question" size={24} color={color} />
           ),
+          tabBarButton: isSiteWorker ? () => null : undefined,
         }}
       />
       <Tabs.Screen
         name="material-order"
         options={{
-          title: "Material Orders",
+          title: "Materials",
           tabBarIcon: ({ color }) => (
             <Feather name="package" size={24} color={color} />
           ),
@@ -185,13 +187,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="progressLogScreen"
+        name="clock-in-out"
         options={{
-          title: "Progress Logs",
+          title: "Clock In/Out",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="journal-sharp" size={24} color={color} />
+            <Feather name="clock" size={24} color={color} />
           ),
-          tabBarButton: isSiteWorker ? () => null : undefined,
         }}
       />
       <Tabs.Screen
@@ -205,9 +206,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="progressLogScreen"
+        options={{
+          title: "Progress",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="journal-sharp" size={24} color={color} />
+          ),
+          tabBarButton: isSiteWorker ? () => null : undefined,
+        }}
+      />
+
+      <Tabs.Screen
         name="time-and-material"
         options={{
-          title: "T & M",
+          title: "T&M",
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="timetable" size={24} color={color} />
           ),

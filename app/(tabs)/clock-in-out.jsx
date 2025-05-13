@@ -32,8 +32,8 @@ import NetInfo from "@react-native-community/netinfo";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import BackgroundGeolocation from "react-native-background-geolocation";
-import { FALL_DETECTION_TASK, postLocationsToServer } from "../../tasks.js";
+// import BackgroundGeolocation from "react-native-background-geolocation";
+// import { FALL_DETECTION_TASK, postLocationsToServer } from "../../tasks.js";
 import { Accelerometer } from "expo-sensors";
 import * as TaskManager from "expo-task-manager";
 
@@ -206,7 +206,7 @@ export default function ClockScreen({ navigation }) {
           console.log(
             "User not clocked in or not paid, stopping BackgroundGeolocation"
           );
-          await BackgroundGeolocation.stop();
+          // await BackgroundGeolocation.stop();
           console.log("BackgroundGeolocation stopped");
           return;
         }
@@ -219,7 +219,7 @@ export default function ClockScreen({ navigation }) {
       } catch (error) {
         console.error("Error managing BackgroundGeolocation:", error.message);
         // Stop BackgroundGeolocation on error to be safe
-        await BackgroundGeolocation.stop();
+        // await BackgroundGeolocation.stop();
       }
     };
 
@@ -229,7 +229,7 @@ export default function ClockScreen({ navigation }) {
     // Cleanup: Ensure BackgroundGeolocation is stopped when component unmounts
     return () => {
       console.log("Cleaning up: Stopping BackgroundGeolocation on unmount");
-      BackgroundGeolocation.stop();
+      // BackgroundGeolocation.stop();
     };
   }, [clockInStatus, isPaid]); // Dependencies: re-run when clockInStatus or isPaid changes
 
